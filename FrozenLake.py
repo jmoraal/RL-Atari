@@ -7,20 +7,27 @@ Created on Thu Jun  3 17:05:05 2021
 import numpy as np
 import gym
 
+### Initialise game settings etc.
 def createEnv(size = 4): 
     '''
     Creates frozen lake game environment in 8x8 if unspecified, else 4x4
     See https://github.com/openai/gym/blob/master/gym/envs/toy_text/frozen_lake.py
     '''
+    global V, final, returns, state, env
+    n = size**2
+    V = np.zeros(n)
+    final = n - 1
+    V[final] = 1
+    returns = np.zeros(n)
+    
+    state = 0
     if size == 8:
         env = gym.make ("FrozenLake8x8-v0")
     else:
         env = gym.make ("FrozenLake-v0")
-    
-    return env
 
 
-env = createEnv()
+createEnv()
 
 # print(env.action_space) # Up, down, right, left
 # print(env.observation_space) # 8x8 grid
@@ -29,24 +36,14 @@ env = createEnv()
 # input()
 
 
-def getCoordinate(index, gridsize):
-    '''Takes location index and turns it into grid coordinate '''
-    return (index // gridsize, index % gridsize) # // is floor division
 
-
-### Temporal Difference ###
+### Temporal Difference Simulation parameters ###
 #after Sutton & Barto, p120 
 nrSteps = 1000
 nrEpisodes = 3
 gamma = 1 #gamma, in slides. May differ per state and iteration
 alpha = 1
 
-V = np.zeros(16)
-final = 15
-V[final] = 1
-returns = np.zeros(16)
-d = np.zeros(16)
-state = 0
 
 # Locations are numbered from left to right, then top to bottom, 
 # e.g., in 4x4 version, 
@@ -56,12 +53,9 @@ state = 0
 #   12 13 14 15
 # but are stored in a list.
 
-#Could also opt for actual square representation?
-# V = np.zeros((4,4)) #book says to initialise arbitrarily except for terminal states (for which V is 0)
-# returns = np.zeros((4,4))
-# d = np.zeros((4,4))
 
 policy = [1,2,1,2,1,2,1,2,1,2,1,2,1,2,1,2] #quite arbitrary, just for testing
+
 
 for n in range(nrEpisodes):
     env.reset() # Reset environment every episode?
@@ -71,16 +65,14 @@ for n in range(nrEpisodes):
         env.render()
         
         # Choose a random action #IMPLEMENT CHOICE RULE HERE
-        #action = env.action_space.sample()
+        #action = env.action_space.sample() #choose random action
         action = policy[state]
         
         # Take chosen action, visit new state and obtain reward
         newState, reward, done, info = env.step(action)
         
-        
         # Update V:
         V[newState] += alpha * (reward + gamma * V[final] - V[newState])
-        
         state = newState
         
         print ("At time " , t , ", we obtained reward " , reward, ", and visited: ", newState)
@@ -92,3 +84,13 @@ for n in range(nrEpisodes):
     
     env.close()
 print(V)    
+
+
+#Could also opt for actual square representation?
+def getCoordinate(index, gridsize):
+    '''Takes location index and turns it into grid coordinate '''
+    return (index // gridsize, index % gridsize) # // is floor division
+
+# V = np.zeros((4,4)) #book says to initialise arbitrarily except for terminal states (for which V is 0)
+# returns = np.zeros((4,4))
+# d = np.zeros((4,4))
