@@ -153,6 +153,60 @@ def Qlearning(nrEpisodes, alpha, gamma, epsilon, printSteps=True):
     return Q, errPerState
 
 
+
+### SARSA: ###
+#after Sutton & Barto, p130
+
+def SARSA(nrEpisodes, alpha, gamma, epsilon, printSteps=True):
+    errPerStateAction = {(i,a):list() for i in range(nrStates) for a in range(4)} # keeps track of error in each state.
+    for n in range(nrEpisodes):
+        env.reset() # Reset environment every episode?
+        t = 0
+        
+        #state-action initialisation (action choice is epsilon-greedy):
+        state = 0
+        if np.random.rand() >= epsilon: 
+            action = np.argmax(Q[state,:]) 
+        else: 
+            action = env.action_space.sample()
+        
+        # Run the game
+        while True:
+            if printSteps: env.render()
+            
+            newState, reward, done, info = env.step(action)
+            
+            #Choose action using eps-greedy policy from Q
+            if np.random.rand() >= epsilon: # with probability 1-epsilon, choose greedily
+                newAction = np.argmax(Q[newState,:]) 
+            else: # with probability epsilon, do not choose greedy
+                newAction = env.action_space.sample() #chooses random action
+            
+            # Take chosen action, visit new state and obtain reward
+            
+            # Update Q and save error to state:
+            err = reward + gamma * Q[newState,newAction] - Q[state, action]
+            Q[state, action] += alpha * err
+            errPerStateAction[state,action].append(err)
+                
+            state = newState
+            action = newAction
+            t += 1
+            
+            if printSteps: 
+                print("At time", t, ", we obtained reward", reward, ", and visited:", newState, "\n")
+                # print("Next action:", actions[action])
+            
+            if done:
+                if printSteps: print("Episode finished" )
+                break
+        
+        env.close()
+    return Q, errPerStateAction
+
+
+
+
 ### Plot error ###
 def plotFromDict(errorDict): 
     plt.clf() # Clears current figure
@@ -163,8 +217,8 @@ def plotFromDict(errorDict):
     for errorList in errorLists:
         plt.plot(errorList)
     
-    plt.xlabel('Error')
-    plt.ylabel('Iteration')
+    plt.xlabel('Number of Visits')
+    plt.ylabel('Error')
     plt.show()
     plt.savefig("FrozenLake.pdf", bbox_inches = 'tight')
 
@@ -185,8 +239,12 @@ gamma = 0.1 #Discounting rate; may differ per state and iteration
 
 # Q-learning:
 epsilon = 0.1
-Q, errors = Qlearning(nrEpisodes, alpha, gamma, epsilon, printSteps = False)
+#Q, errors = Qlearning(nrEpisodes, alpha, gamma, epsilon, printSteps = False)
 
+
+# SARSA:
+epsilon = 0.1
+Q, errors = SARSA(nrEpisodes, alpha, gamma, epsilon, printSteps = False)
 
 plotFromDict(errors)
 
