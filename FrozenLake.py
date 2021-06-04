@@ -29,7 +29,7 @@ def createEnv(size = 4):
     Objective is to reach goal (reward 1) from start via frozen tiles; stepping on H means drowning (reward 0).
     See https://github.com/openai/gym/blob/master/gym/envs/toy_text/frozen_lake.py or https://gym.openai.com/envs/FrozenLake-v0/
     '''
-    global nrStates, V, final, returns, state, env
+    global nrStates, V, final, returns, state, env, actions
     nrStates = size**2
     V = np.zeros(nrStates)
     final = nrStates - 1
@@ -41,86 +41,92 @@ def createEnv(size = 4):
         env = gym.make ("FrozenLake8x8-v0")
     else:
         env = gym.make ("FrozenLake-v0")
+        
+    actions = ['left', 'down', 'right', 'up']
 
-
-
-createEnv()
-
-
-
-### Temporal Difference Simulation parameters ###
-nrEpisodes = 100
-alpha = 0.2 #Stepsize
-gamma = 0.2 #Discounting rate; may differ per state and iteration
-
-
-#policy = np.random.choice(range(4),nrStates) #random policy
-#policy = [1,2,1,2,1,2,1,2,1,2,1,2,1,2,1,2] #fixed policy
 
 
 ### Simulation with TD ###
 #after Sutton & Barto, p120 
 
-TDerrPerState = {i:list() for i in range(nrStates)} # keeps track of error in each state.
-# (note that tracking all errors in one list does not make sense, since some states
-#  are visited more often earlier on and thus already show some convergence.)
-
-
-for n in range(nrEpisodes):
-    env.reset() # Reset environment every episode?
-    state = 0
-    t = 0
-    # Run the game
-    while True:
-        env.render()
-        
-        # Choose action 
-        action = env.action_space.sample() #choose random action
-        #action = policy[state] #follow policy
-        
-        # Take chosen action, visit new state and obtain reward
-        newState, reward, done, info = env.step(action)
-        
-        # Update V:
-        old = V[state] # must be stored here, for the case state = newState
-        V[newState] += alpha * (reward + gamma * V[final] - V[newState])
-        
-        # Keep track of errors: now all negative... but at least converging
-        TDerrPerState[state].append(reward + gamma*V[newState] - old)
-        #not too happy with appending, but cannot know in advance how long it will become
-        #also, is the indexing correct? Book mentions this error is not available until next timestep (below eq 6.5)
-            
-        state = newState
-        t += 1
-        
-        print ("At time ", t, ", we obtained reward ", reward, ", and visited: ", newState)
-        print(action)
-        
-        if done:
-                print ("Episode finished" )
-                break
+def TD(nrEpisodes, alpha, gamma, policy = None, printSteps=True): 
+    ''' Runs TD(0) algorithm for given number of episodes to estimate value function V '''
     
-    env.close()
-#print(V)
+    TDerrPerState = {i:list() for i in range(nrStates)} # keeps track of error in each state.
+    # (note that tracking all errors in one list does not make sense, since some states
+    #  are visited more often earlier on and thus already show some convergence.)
+    for n in range(nrEpisodes):
+        env.reset() # Reset environment every episode?
+        state = 0
+        t = 0
+        # Run the game
+        while True:
+            if printSteps: env.render()
+            
+            # Choose action 
+            if policy == None:
+                action = env.action_space.sample() #choose random action
+            else: 
+                action = policy[state] #follow policy
+            
+            # Take chosen action, visit new state and obtain reward
+            newState, reward, done, info = env.step(action)
+            
+            # Update V:
+            old = V[state] # must be stored here, for the case state = newState
+            V[newState] += alpha * (reward + gamma * V[final] - V[newState])
+            
+            # Keep track of errors: now all negative... but at least converging
+            TDerrPerState[state].append(reward + gamma*V[newState] - old)
+            #not too happy with appending, but cannot know in advance how long it will become
+            #also, is the indexing correct? Book mentions this error is not available until next timestep (below eq 6.5)
+                
+            state = newState
+            t += 1
+            
+            if printSteps: 
+                print("At time", t, ", we obtained reward", reward, ", and visited:", newState, "\n")
+                # print("Next action:", actions[action])
+            
+            if done:
+                if printSteps: print("Episode finished" )
+                break
+        
+        env.close()
+    return V, TDerrPerState
 
 
 ### Plot error ###
-plt.clf() # Clears current figure
-plt.rcParams.update({'font.size': 12})
+def plotFromDict(errorDict): 
+    plt.clf() # Clears current figure
+    plt.rcParams.update({'font.size': 12})
+    
+    # Errors per state: (inspired by https://towardsdatascience.com/reinforcement-learning-rl-101-with-python-e1aa0d37d43b)
+    errorLists = [list(x)[:50] for x in errorDict.values()]
+    for errorList in errorLists:
+        plt.plot(errorList)
+    
+    plt.xlabel('Error')
+    plt.ylabel('Iteration')
+    plt.show()
+    plt.savefig("FrozenLake.pdf", bbox_inches = 'tight')
 
-# All errors in one sequence:
-#plt.plot(TDerrors)
 
-# Errors per state: (inspired by https://towardsdatascience.com/reinforcement-learning-rl-101-with-python-e1aa0d37d43b)
-errorLists = [list(x)[:50] for x in TDerrPerState.values()]
-for errorList in errorLists:
-    plt.plot(errorList)
-#plt.legend( (,,), loc = 'best') 
 
-plt.xlabel('Error')
-plt.ylabel('Iteration')
-plt.show()
-plt.savefig("FrozenLake.pdf", bbox_inches = 'tight')
+### Execution ###
+createEnv()
+
+nrEpisodes = 10
+alpha = 0.2 #Stepsize
+gamma = 0.2 #Discounting rate; may differ per state and iteration
+
+
+# arbitraryPolicy = np.random.choice(range(4),nrStates) #randomly chosen policy, but fixed from now on
+# fixedPolicy = [1,2,1,2,1,2,1,2,1,2,1,2,1,2,1,2] #fixed policy
+
+V, errors = TD(nrEpisodes, alpha, gamma) #optional arguments: policy and printSteps
+# plotFromDict(errors)
+
 
 
 
