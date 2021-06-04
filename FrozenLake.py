@@ -29,30 +29,39 @@ def createEnv(size = 4):
     Objective is to reach goal (reward 1) from start via frozen tiles; stepping on H means drowning (reward 0).
     See https://github.com/openai/gym/blob/master/gym/envs/toy_text/frozen_lake.py or https://gym.openai.com/envs/FrozenLake-v0/
     '''
-    global nrStates, V, final, returns, state, env, actions
+    global actions, nrStates, final, returns, state, V, Q, env
+    actions = ['left', 'down', 'right', 'up']
     nrStates = size**2
-    V = np.zeros(nrStates)
-    final = nrStates - 1
-    V[final] = 1
-    returns = np.zeros(nrStates)
     state = 0
+    final = nrStates - 1
+    returns = np.zeros(nrStates)
+    
+    #for TD: 
+    V = np.zeros(nrStates) #TODO probably initialise this inside TD, not here
+    V[final] = 1
+    
+    #for Q-learning:
+    Q = np.zeros((nrStates, 4)) # TODO should we initialise to zero?
+    Q[final,:] = 1
     
     if size == 8:
         env = gym.make ("FrozenLake8x8-v0")
     else:
         env = gym.make ("FrozenLake-v0")
         
-    actions = ['left', 'down', 'right', 'up']
 
 
 
-### Simulation with TD ###
+### TD learning ###
 #after Sutton & Barto, p120 
+
+#TODO: maybe implement TD, Qlearning etc. differently to re-use parts of the loop below?
+# benefit of current approach is ease of comparison to pseudocode in book.
 
 def TD(nrEpisodes, alpha, gamma, policy = None, printSteps=True): 
     ''' Runs TD(0) algorithm for given number of episodes to estimate value function V '''
     
-    TDerrPerState = {i:list() for i in range(nrStates)} # keeps track of error in each state.
+    errPerState = {i:list() for i in range(nrStates)} # keeps track of error in each state.
     # (note that tracking all errors in one list does not make sense, since some states
     #  are visited more often earlier on and thus already show some convergence.)
     for n in range(nrEpisodes):
@@ -72,14 +81,19 @@ def TD(nrEpisodes, alpha, gamma, policy = None, printSteps=True):
             # Take chosen action, visit new state and obtain reward
             newState, reward, done, info = env.step(action)
             
-            # Update V:
-            old = V[state] # must be stored here, for the case state = newState
-            V[newState] += alpha * (reward + gamma * V[final] - V[newState])
-            
-            # Keep track of errors: now all negative... but at least converging
-            TDerrPerState[state].append(reward + gamma*V[newState] - old)
+            # Update V and keep track of errors:
+            err = reward + gamma * V[newState] - V[state]
+            V[state] += alpha * err
+            errPerState[state].append(err) # TODO: now all negative... but at least converging
             #not too happy with appending, but cannot know in advance how long it will become
             #also, is the indexing correct? Book mentions this error is not available until next timestep (below eq 6.5)
+            
+            #TODO: sometimes, done like this: see e.g. https://towardsdatascience.com/reinforcement-learning-rl-101-with-python-e1aa0d37d43b
+            # old = V[state] # must be stored here, for the case state = newState
+            # V[newState] += alpha * (reward + gamma * V[final] - V[newState])
+            
+            # # Keep track of errors: now all negative... but at least converging
+            # TDerrPerState[state].append(reward + gamma*V[newState] - old)
                 
             state = newState
             t += 1
@@ -93,7 +107,50 @@ def TD(nrEpisodes, alpha, gamma, policy = None, printSteps=True):
                 break
         
         env.close()
-    return V, TDerrPerState
+    return V, errPerState
+
+
+### Q-learning: ###
+#after Sutton & Barto, p131
+
+def Qlearning(nrEpisodes, alpha, gamma, epsilon, printSteps=True):
+    errPerState = {i:list() for i in range(nrStates)} # keeps track of error in each state.
+    for n in range(nrEpisodes):
+        env.reset() # Reset environment every episode?
+        state = 0
+        t = 0
+        
+        # Run the game
+        while True:
+            if printSteps: env.render()
+            
+            #Choose action using eps-greedy policy from Q
+            if np.random.rand() >= epsilon: # with probability 1-epsilon, choose greedily
+                action = np.argmax(Q[state,:]) 
+            else: # with probability epsilon, do not choose greedy
+                action = env.action_space.sample() #chooses random action
+            
+            # Take chosen action, visit new state and obtain reward
+            newState, reward, done, info = env.step(action)
+            
+            # Update Q and save error to state:
+            err = reward + gamma * np.max(Q[newState,:]) - Q[state, action]
+            Q[state, action] += alpha * err
+            errPerState[state].append(err)
+                
+            state = newState
+            t += 1
+            
+            if printSteps: 
+                print("At time", t, ", we obtained reward", reward, ", and visited:", newState, "\n")
+                # print("Next action:", actions[action])
+            
+            if done:
+                if printSteps: print("Episode finished" )
+                break
+        
+        env.close()
+    return Q, errPerState
 
 
 ### Plot error ###
@@ -116,17 +173,22 @@ def plotFromDict(errorDict):
 ### Execution ###
 createEnv()
 
-nrEpisodes = 10
-alpha = 0.2 #Stepsize
-gamma = 0.2 #Discounting rate; may differ per state and iteration
+nrEpisodes = 1000
+alpha = 0.1 #Stepsize
+gamma = 0.1 #Discounting rate; may differ per state and iteration
 
-
+# TD: 
 # arbitraryPolicy = np.random.choice(range(4),nrStates) #randomly chosen policy, but fixed from now on
 # fixedPolicy = [1,2,1,2,1,2,1,2,1,2,1,2,1,2,1,2] #fixed policy
 
-V, errors = TD(nrEpisodes, alpha, gamma) #optional arguments: policy and printSteps
-# plotFromDict(errors)
+# V, errors = TD(nrEpisodes, alpha, gamma, printSteps = False) #optional arguments: policy and printSteps
 
+# Q-learning:
+epsilon = 0.1
+Q, errors = Qlearning(nrEpisodes, alpha, gamma, epsilon, printSteps = False)
+
+
+plotFromDict(errors)
 
 
 
