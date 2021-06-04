@@ -8,6 +8,11 @@ import numpy as np
 import gym
 from matplotlib import pyplot as plt 
 
+
+###TODO###
+# Initialisatie van V en Q functies/arrays zijn nu nog 1 voor goal, 0 voor de rest. Geen idee of dat klopt
+# Error plots zijn alleen nog maar constant 0. Bij TD leek er wel iets op convergence toen ik een andere methode dan in het boek gebruikte, maar geen idee of en waarom die klopt
+
 ### Initialise game settings etc.
 def createEnv(size = 4): 
     '''
