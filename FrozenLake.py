@@ -16,7 +16,8 @@ from matplotlib import pyplot as plt
 ### Initialise game settings etc.
 def createEnv(size = 4): 
     '''
-    Creates frozen lake game environment in 4x4 if unspecified, else 8x8
+    Creates frozen lake game environment in 4x4 if unspecified, else 8x8, 
+    and initialises variables for TD, Q-learning and SARSA methods. 
     
     State space: square grid. Locations are numbered from left to right, then 
     top to bottom, and stored in a list. E.g. in 4x4 version:
@@ -119,6 +120,7 @@ def TD(nrEpisodes, alpha, gamma, policy = None, printSteps=True):
 #after Sutton & Barto, p131
 
 def Qlearning(nrEpisodes, alpha, gamma, epsilon, printSteps=True):
+    ''' Runs Q-learning algorithm for given number of episodes to estimate state-action table Q '''
     errPerState = {i:list() for i in range(nrStates)} # keeps track of error in each state.
     for n in range(nrEpisodes):
         env.reset() # Reset environment every episode?
@@ -163,6 +165,7 @@ def Qlearning(nrEpisodes, alpha, gamma, epsilon, printSteps=True):
 #after Sutton & Barto, p130
 
 def SARSA(nrEpisodes, alpha, gamma, epsilon, printSteps=True):
+    ''' Runs SARSA algorithm for given number of episodes to estimate state-action table Q '''
     errPerStateAction = {(i,a):list() for i in range(nrStates) for a in range(4)} # keeps track of error in each state.
     for n in range(nrEpisodes):
         env.reset() # Reset environment every episode?
