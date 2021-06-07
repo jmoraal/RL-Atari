@@ -121,7 +121,11 @@ def policyEvaluation(nrEpisodes, alpha, gamma, policy, evaluationMethod, epsilon
                 directions =  ["L", "D", "R", "U"]
                 print("At time", t, ", we obtain reward", reward, ", choose ", directions[action], " and move to:", newState, "\n")
                 
-            
+            if done:
+                if printSteps: print(f"Episode finished after {t+1} timesteps" )
+                if reward == 1: # won game
+                    gameDurations.append(t+1)
+                break 
             
             # Update policy using value function
             # Now that we have the value function of all the states, our next step is to extract the policy from the Value Function.
@@ -129,11 +133,7 @@ def policyEvaluation(nrEpisodes, alpha, gamma, policy, evaluationMethod, epsilon
             # policy = updatePolicy(...)
             
             
-            if done:
-                if printSteps: print(f"Episode finished after {t+1} timesteps" )
-                if reward == 1: # won game
-                    gameDurations.append(t+1)
-                break    
+               
         
 #         env.close() S: what does this do?
     
