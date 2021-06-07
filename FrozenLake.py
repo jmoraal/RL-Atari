@@ -61,6 +61,8 @@ def chooseAction(env, policy, V, currentState, epsilon = 0):
                     
 def policyEvaluation(nrEpisodes, alpha, gamma, policy, evaluationMethod, epsilon = 0, printSteps = True): 
     
+    gameDurations = [] # for analysis
+    
     if evaluationMethod == "TD":
         V = np.random.rand(nrStates) 
         V[finalState] = 0
@@ -121,6 +123,8 @@ def policyEvaluation(nrEpisodes, alpha, gamma, policy, evaluationMethod, epsilon
             
             if done:
                 if printSteps: print(f"Episode finished after {t+1} timesteps" )
+                if reward == 1: # won game
+                    gameDurations.append(t+1)
                 break    
         
 #         env.close() S: what does this do?
@@ -129,7 +133,7 @@ def policyEvaluation(nrEpisodes, alpha, gamma, policy, evaluationMethod, epsilon
         
     
 
-    return V, errors
+    return V, errors, gameDurations
 
 
 # def TD(nrEpisodes, alpha, gamma, policy = None, printSteps=True): 
@@ -307,29 +311,33 @@ def plotFromDict(errorDict, title = ""):
     plt.show()
     plt.savefig("FrozenLake-"+title+".pdf", bbox_inches = 'tight')
 
+def printGameSummary(durations):
+    print(f"Percentage of games won: {len(durations)/nrEpisodes*100}")
+    print(f"Average duration winning game: {np.mean(durations)} steps")
 
 ### Execution ###
 createEnv()
 
-nrEpisodes = 300
+nrEpisodes = 1000
 alpha = 0.1 # stepsize
 gamma = 0.1 # discounting rate; may differ per state and iteration
 eps = 0.1
 
 # TD: 
 # TODO what policy??
-V, errors = policyEvaluation(nrEpisodes, alpha, gamma, policy = "random", evaluationMethod = "TD", printSteps = False) # optional argument: printSteps
+V, errors, durations = policyEvaluation(nrEpisodes, alpha, gamma, policy = "random", evaluationMethod = "TD", printSteps = False) # optional argument: printSteps
 plotFromDict(errors, title = "TD")
+printGameSummary(durations)
 
 # Q-learning:
-Q, errors = policyEvaluation(nrEpisodes, alpha, gamma, policy = "greedy", evaluationMethod = "Q", epsilon = eps, printSteps = False)
+Q, errors, durations = policyEvaluation(nrEpisodes, alpha, gamma, policy = "greedy", evaluationMethod = "Q", epsilon = eps, printSteps = False)
 plotFromDict(errors, title = "Q")
+printGameSummary(durations)
 
 # SARSA:
-Q, errors = policyEvaluation(nrEpisodes, alpha, gamma, policy = "greedy", evaluationMethod = "SARSA", epsilon = eps, printSteps = False)
+Q, errors, durations = policyEvaluation(nrEpisodes, alpha, gamma, policy = "greedy", evaluationMethod = "SARSA", epsilon = eps, printSteps = False)
 plotFromDict(errors, title = "SARSA")
-
-
+printGameSummary(durations)
 
 
 
