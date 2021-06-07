@@ -73,47 +73,49 @@ def policyEvaluation(nrEpisodes, alpha, gamma, policy, evaluationMethod, epsilon
         V = np.random.rand(nrStates,nrActions)
         V[finalState,:] = 0
         errors = {i:list() for i in range(nrStates*nrActions)} 
+        currentState = startState
+        action = chooseAction(env, policy, V, currentState, epsilon)  # needs to be initialized for SARSA
         
         
     # Run game nrEpisodes times
     for n in range(nrEpisodes):
         currentState = env.reset() # reset game to initial state
-        # if evaluationMethod == "SARSA": previousAction = chooseAction(env, policy, V, currentState, epsilon) # need to initialize zero'th action 
         
         # Run one game
         for t in range(1000): # perform maximally 1000 steps 
             if printSteps: 
                 env.render()
             
-            # Choose action based on policy
-            action = chooseAction(env, policy, V, currentState, epsilon) 
+            # Evaluate policy
+            if evaluationMethod == "TD" or evaluationMethod == "Q":
+                # Choose action based on policy
+                action = chooseAction(env, policy, V, currentState, epsilon) 
         
-            # Take chosen action, visit new state and obtain reward
-            newState, reward, done, info = env.step(action)
-            
+                # Take chosen action, visit new state and obtain reward
+                newState, reward, done, info = env.step(action)
+                
+                if evaluationMethod == "TD":
+                    tempValue = V[currentState]
+                    V[currentState] += alpha*(reward + gamma*V[newState] - V[currentState]) # S: or should we work with a np copy of V (like in tutorial)?
+                    errors[currentState].append(float(np.abs(tempValue-V[currentState])))
+                elif evaluationMethod == "Q":
+                    tempValue = V[currentState, action]
+                    V[currentState,:] += alpha*(reward + gamma*np.max(V[newState,:]) - V[currentState, action])
+                    errors[currentState*nrActions + action].append(float(np.abs(tempValue-V[currentState, action]))) # S: same errors as TD ??
+                
+            elif evaluationMethod == "SARSA":
+                newState, reward, done, info = env.step(action)
+                newAction = chooseAction(env, policy, V, newState, epsilon)
+                tempValue = V[currentState, action]
+                V[currentState,action] += alpha*(reward + gamma*V[newState,newAction] - V[currentState, action])
+                errors[currentState*nrActions + action].append(float(np.abs(tempValue-V[currentState, action]))) # S: same errors as TD ??
+                action = newAction 
+                 
             # Print results if desired
             if printSteps:
                 directions =  ["L", "D", "R", "U"]
                 print("At time", t, ", we obtain reward", reward, ", choose ", directions[action], " and move to:", newState, "\n")
-            
-            # Evaluate policy
-            if evaluationMethod == "TD":
-                tempValue = V[currentState]
-                V[currentState] += alpha*(reward + gamma*V[newState] - V[currentState]) # S: or should we work with a np copy of V (like in tutorial)?
-                errors[currentState].append(float(np.abs(tempValue-V[currentState])))
-            
-            elif evaluationMethod == "Q":
-                tempValue = V[currentState, action]
-                V[currentState,:] += alpha*(reward + gamma*np.max(V[newState,:]) - V[currentState, action])
-                errors[currentState*nrActions + action].append(float(np.abs(tempValue-V[currentState, action]))) # S: same errors as TD ??
                 
-            elif evaluationMethod == "SARSA":
-                newAction = chooseAction(env, policy, V, newState)
-                tempValue = V[currentState, action]
-                V[currentState,action] += alpha*(reward + gamma*np.max(V[newState,newAction]) - V[currentState, action])
-                errors[currentState*nrActions + action].append(float(np.abs(tempValue-V[currentState, action]))) # S: same errors as TD ??
-                action = newAction # S: why update? A new action will be chosen in the next iteration anyways....
-                 
             # Update state
             currentState = newState
             
