@@ -112,14 +112,22 @@ def policyEvaluation(nrEpisodes, alpha, gamma, policy, evaluationMethod, epsilon
                 V[currentState,action] += alpha*(reward + gamma*V[newState,newAction] - V[currentState, action])
                 errors[currentState*nrActions + action].append(float(np.abs(tempValue-V[currentState, action]))) # S: same errors as TD ??
                 action = newAction 
-                 
+              
+            # Update state
+            currentState = newState
+            
             # Print results if desired
             if printSteps:
                 directions =  ["L", "D", "R", "U"]
                 print("At time", t, ", we obtain reward", reward, ", choose ", directions[action], " and move to:", newState, "\n")
                 
-            # Update state
-            currentState = newState
+            
+            
+            # Update policy using value function
+            # Now that we have the value function of all the states, our next step is to extract the policy from the Value Function.
+            # See https://medium.com/analytics-vidhya/solving-the-frozenlake-environment-from-openai-gym-using-value-iteration-5a078dffe438
+            # policy = updatePolicy(...)
+            
             
             if done:
                 if printSteps: print(f"Episode finished after {t+1} timesteps" )
