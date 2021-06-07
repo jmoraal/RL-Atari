@@ -16,7 +16,8 @@ from matplotlib import pyplot as plt
 ### Initialise game settings etc.
 def createEnv(size = 4): 
     '''
-    Creates frozen lake game environment in 4x4 if unspecified, else 8x8
+    Creates frozen lake game environment in 4x4 if unspecified, else 8x8, 
+    and initialises variables for TD, Q-learning and SARSA methods. 
     
     State space: square grid. Locations are numbered from left to right, then 
     top to bottom, and stored in a list. E.g. in 4x4 version:
