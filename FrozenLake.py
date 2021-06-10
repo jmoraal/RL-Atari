@@ -50,11 +50,34 @@ def epsGreedy(Q, state, epsilon = 0.05):
         return np.argmax(Q[state,:])
     else: # with probability epsilon, choose randomly
         return env.action_space.sample()
-                    
-def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod, epsilon = 0, printSteps = True): 
+
+
+# Quality check of given policy
+def averagePerformance(Q, policy = epsGreedy): 
+    '''Performs same policy over and over to measure accuracy
+    
+    Especially meant to test final policy developed during simulation'''
+    nrGames = 1000
+    rewards = np.zeros(nrGames)
+    
+    for i in range(nrGames):
+        done = False
+        state = env.reset()
+        
+        while not done: 
+            action = policy(Q, state)
+            state, reward, done, info = env.step(action)
+        
+        rewards[i] = reward
+    
+    return np.mean(rewards), np.std(rewards) #TODO sth with confidence intervals (also for other analyses)
+
+## Main function: policy evaluation/improvement                    
+def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod, epsilon = 0, printSteps = True, progressPoints = 100): 
     
     gameDurations = [] # for analysis
-    gamesWon = []
+    gamesWon = np.zeros(nrEpisodes)
+    winRatios = np.zeros(nrEpisodes)
     
     # Initialize value function and error lists
     if evaluationMethod == "TD":
@@ -137,11 +160,15 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod, epsilon = 0, pr
         
         if printSteps: print(f"Episode finished after {t+1} timesteps" )
         if reward == 1: gameDurations.append(t+1) # won the game
-        gamesWon.append(reward)
+        gamesWon[n] = reward
         
         
-        if (n % int(nrEpisodes/20) == 0): #Print progress 20 times (evenly distributed)
-            print(f"{n} out of {nrEpisodes}")
+        if (evaluationMethod == "SARSA" or evaluationMethod == "Q"): 
+            if (n % (nrEpisodes//progressPoints) == 0): #Print progress given number of times (evenly distributed)
+                _, ratio = averagePerformance(V)
+                print(f"{n} out of {nrEpisodes}, current win ratio is {ratio:3.4f}")
+                winRatios
+        
             
             # Update policy using value function
             # Now that we have the value function of all the states, our next step is to extract the policy from the Value Function.
@@ -190,26 +217,6 @@ def plotLearningCurve(gamesWon, title):
     plt.savefig("FrozenLakeLC-"+title+".pdf", bbox_inches = 'tight')
 
 
-# Quality check of final policy
-def averagePerformance(Q, policy = epsGreedy): 
-    '''Performs same policy over and over to measure accuracy
-    
-    Especially meant to test final policy developed during simulation'''
-    totalRewards = 0
-    nrGames = 1000
-    
-    for i in range(nrGames):
-        done = False
-        state = env.reset()
-        
-        while not done: 
-            action = policy(Q, state)
-            state, reward, done, info = env.step(action)
-            totalRewards += reward
-    
-    return totalRewards/nrGames #TODO sth with confidence intervals (also for other analyses)
-
-
 # Summary
 def printGameSummary(durations, evaluationMethod):
     print(evaluationMethod,":")
@@ -234,9 +241,9 @@ def runSimulation(evaluationMethod):
     printGameSummary(durations, evaluationMethod)
 
 
-# TD: 
-evaluationMethod = "TD"
-runSimulation(evaluationMethod)
+# # TD: 
+# evaluationMethod = "TD"
+# runSimulation(evaluationMethod)
 
 # # Q-learning:
 # evaluationMethod = "Q"
@@ -244,9 +251,9 @@ runSimulation(evaluationMethod)
 # print(averagePerformance(Q))
 
 # SARSA:
-# evaluationMethod = "SARSA"
-# runSimulation(evaluationMethod)
-# print(averagePerformance(Q))
+evaluationMethod = "SARSA"
+runSimulation(evaluationMethod)
+print(averagePerformance(Q))
 
 
 
