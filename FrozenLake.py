@@ -172,7 +172,7 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod, epsilon = 0, pr
                                                  # Still, deemed an important progress measure
                                                  #TODO? Maybe can be replaced by sliding-window type average (instead of running average as we use now in evaluation)
                 winRatios[n//interval] = ratio
-                print(f"{n} out of {nrEpisodes}, current win ratio is {ratio:3.4f}")
+                print(f"{n+1} out of {nrEpisodes}, current win ratio is {ratio:3.4f}")
         
             
             # Update policy using value function
@@ -256,7 +256,7 @@ createEnv()
 nrEpisodes = 50000
 alpha = 0.02 # stepsize
 gamma = 1 # discounting rate; may differ per state and iteration
-eps = 0.05
+eps = 0.1
 
 def runSimulation(evaluationMethod):
     global Q, durations, gamesWon, winRatios
