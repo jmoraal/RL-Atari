@@ -59,9 +59,9 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod, epsilon = 0, pr
     # Initialize value function and error lists
     if evaluationMethod == "TD":
         #V = np.random.rand(nrStates) 
-        V = np.ones(nrStates)
-        #V = np.zeros(nrStates)
-        #V[finalState] = 0
+        # V = np.ones(nrStates)
+        V = np.zeros(nrStates) #TODO maybe this one does have to initialise to 0? See website
+        V[finalState] = 0
         errors = {i:list() for i in range(nrStates)}  # keeps track of error in each state
     elif evaluationMethod == "Q":
         # V = np.random.rand(nrStates,nrActions)
@@ -69,8 +69,8 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod, epsilon = 0, pr
         #V[finalState,:] = 0
         errors = {i:list() for i in range(nrStates*nrActions)}  # 2d matrix mapped to vector! J: Why? Doesn't it only make indexing difficult further on
     elif evaluationMethod == "SARSA":
-        V = np.random.rand(nrStates,nrActions)
-        # V = np.ones((nrStates,nrActions))
+        # V = np.random.rand(nrStates,nrActions)
+        V = np.ones((nrStates,nrActions))
         #V[finalState,:] = 0
         errors = {i:list() for i in range(nrStates*nrActions)} 
         #currentState = startState
@@ -138,6 +138,10 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod, epsilon = 0, pr
         if printSteps: print(f"Episode finished after {t+1} timesteps" )
         if reward == 1: gameDurations.append(t+1) # won the game
         gamesWon.append(reward)
+        
+        
+        if (n % int(nrEpisodes/20) == 0): #Print progress 20 times (evenly distributed)
+            print(f"{n} out of {nrEpisodes}")
             
             # Update policy using value function
             # Now that we have the value function of all the states, our next step is to extract the policy from the Value Function.
@@ -181,7 +185,7 @@ def plotLearningCurve(gamesWon, title):
     
     plt.xlabel('Episode')
     plt.ylabel('Average reward per episode')
-    plt.title('Learning cursve '+title)
+    plt.title('Learning curve '+title)
     plt.show()
     plt.savefig("FrozenLakeLC-"+title+".pdf", bbox_inches = 'tight')
 
@@ -230,10 +234,9 @@ def runSimulation(evaluationMethod):
     printGameSummary(durations, evaluationMethod)
 
 
-# # TD: 
-# evaluationMethod = "TD"
-# runSimulation(evaluationMethod)
-# print(averagePerformance(Q))
+# TD: 
+evaluationMethod = "TD"
+runSimulation(evaluationMethod)
 
 # # Q-learning:
 # evaluationMethod = "Q"
@@ -241,9 +244,9 @@ def runSimulation(evaluationMethod):
 # print(averagePerformance(Q))
 
 # SARSA:
-evaluationMethod = "SARSA"
-runSimulation(evaluationMethod)
-print(averagePerformance(Q))
+# evaluationMethod = "SARSA"
+# runSimulation(evaluationMethod)
+# print(averagePerformance(Q))
 
 
 
