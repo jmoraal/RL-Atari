@@ -77,7 +77,7 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod, epsilon = 0, pr
     
     gameDurations = [] # for analysis
     gamesWon = np.zeros(nrEpisodes)
-    winRatios = np.zeros(nrEpisodes)
+    winRatios = np.zeros(progressPoints)
     
     # Initialize value function and error lists
     if evaluationMethod == "TD":
@@ -89,12 +89,14 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod, epsilon = 0, pr
     elif evaluationMethod == "Q":
         # V = np.random.rand(nrStates,nrActions)
         V = np.ones((nrStates,nrActions))
-        #V[finalState,:] = 0
         errors = {i:list() for i in range(nrStates*nrActions)}  # 2d matrix mapped to vector! J: Why? Doesn't it only make indexing difficult further on
     elif evaluationMethod == "SARSA":
         # V = np.random.rand(nrStates,nrActions)
         V = np.ones((nrStates,nrActions))
-        #V[finalState,:] = 0
+        
+        #V = np.zeros((nrStates,nrActions))
+        #V[finalState,:] = 1
+        
         errors = {i:list() for i in range(nrStates*nrActions)} 
         #currentState = startState
         action = env.action_space.sample()  #TODO needs to be initialized for SARSA 
@@ -164,10 +166,13 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod, epsilon = 0, pr
         
         
         if (evaluationMethod == "SARSA" or evaluationMethod == "Q"): 
-            if (n % (nrEpisodes//progressPoints) == 0): #Print progress given number of times (evenly distributed)
-                _, ratio = averagePerformance(V)
+            interval = nrEpisodes//progressPoints
+            if ((n+1) % interval == 0): #Print progress given number of times (evenly distributed)
+                _, ratio = averagePerformance(V) # Note: significantly slows down iteration as this function iterates the game a few hundred times
+                                                 # Still, deemed an important progress measure
+                                                 #TODO? Maybe can be replaced by sliding-window type average (instead of running average as we use now in evaluation)
+                winRatios[n//interval] = ratio
                 print(f"{n} out of {nrEpisodes}, current win ratio is {ratio:3.4f}")
-                winRatios
         
             
             # Update policy using value function
@@ -179,7 +184,7 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod, epsilon = 0, pr
          
 #         env.close() S: what does this do? J: I think this only matters if gym opens another window
  
-    return V, errors, gameDurations, np.asarray(gamesWon)
+    return V, errors, gameDurations, np.asarray(gamesWon), winRatios
 
 
 
@@ -217,11 +222,31 @@ def plotLearningCurve(gamesWon, title):
     plt.savefig("FrozenLakeLC-"+title+".pdf", bbox_inches = 'tight')
 
 
+# Winning ratio development over time
+def plotWinRatios(winRatios, title, interval): 
+    plt.clf()
+    plt.rcParams.update({'font.size': 12})
+    
+    x = np.arange(nrEpisodes//interval)*interval
+    y = winRatios
+    plt.plot(x,y)
+    
+    plt.xlabel('Episode')
+    plt.ylabel('Average reward per episode')
+    plt.title('Learning curve '+title)
+    plt.show()
+    plt.savefig("FrozenLakeLC-"+title+".pdf", bbox_inches = 'tight')
+
+
 # Summary
-def printGameSummary(durations, evaluationMethod):
+def printGameSummary(durations, gamesWon, evaluationMethod, winRatios):
     print(evaluationMethod,":")
     print(f"Percentage of games won: {(len(durations)/nrEpisodes)*100}")
-    print(f"Average duration winning game: {np.mean(durations)} steps")
+    last = gamesWon[-nrEpisodes//10:]
+    print(f"Percentage of games won towards end: {np.sum(last)/len(last)*100}")
+    print(f"Average duration winning game: {np.mean(durations)} steps") #wild idea: can we add a penalty to all non-Goal states so that the policy will favour a shorter solution? :D
+    if (evaluationMethod == "SARSA" or evaluationMethod == "Q"): #TODO not yet working for TD
+        print(f"Final winning ratio: {winRatios[-1]}")  
 
 
 
@@ -234,11 +259,14 @@ gamma = 1 # discounting rate; may differ per state and iteration
 eps = 0.05
 
 def runSimulation(evaluationMethod):
-    global Q, durations, gamesWon
-    Q, errors, durations, gamesWon = policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod = "SARSA", epsilon = eps, printSteps = False)
+    global Q, durations, gamesWon, winRatios
+    Q, errors, durations, gamesWon, winRatios = policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod = evaluationMethod, epsilon = eps, printSteps = False)
     plotFromDict(errors, evaluationMethod)
     plotLearningCurve(gamesWon, evaluationMethod)
-    printGameSummary(durations, evaluationMethod)
+    printGameSummary(durations, gamesWon, evaluationMethod, winRatios)
+    plotWinRatios(winRatios, evaluationMethod, len(gamesWon)//len(winRatios)) 
+    #TODO somehow, winning ratio does not seem to get above exactly 0.5 (for SARSA at least). Could mean ratio computation
+    # is wrong, or update rule somehow stops improving (thinks its objective is reached) after that...
 
 
 # # TD: 
@@ -248,13 +276,7 @@ def runSimulation(evaluationMethod):
 # # Q-learning:
 # evaluationMethod = "Q"
 # runSimulation(evaluationMethod)
-# print(averagePerformance(Q))
 
 # SARSA:
 evaluationMethod = "SARSA"
 runSimulation(evaluationMethod)
-print(averagePerformance(Q))
-
-
-
-
