@@ -42,6 +42,14 @@ def createEnv(size = 4):
     startState = 0
     finalState = nrStates - 1
     returns = np.zeros(nrStates)
+
+
+def epsGreedy(Q, state, epsilon = 0.05): 
+    ''' Makes epsilon-greedy choice for action given state and value table'''
+    if np.random.rand() > epsilon: # with probability 1-epsilon, choose current best option greedily
+        return np.argmax(Q[state,:])
+    else: # with probability epsilon, choose randomly
+        return env.action_space.sample()
                     
 def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod, epsilon = 0, printSteps = True): 
     
@@ -50,19 +58,24 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod, epsilon = 0, pr
     
     # Initialize value function and error lists
     if evaluationMethod == "TD":
-        V = np.random.rand(nrStates) 
-        V[finalState] = 0
+        #V = np.random.rand(nrStates) 
+        V = np.ones(nrStates)
+        #V = np.zeros(nrStates)
+        #V[finalState] = 0
         errors = {i:list() for i in range(nrStates)}  # keeps track of error in each state
     elif evaluationMethod == "Q":
-        V = np.random.rand(nrStates,nrActions)
-        V[finalState,:] = 0
-        errors = {i:list() for i in range(nrStates*nrActions)}  # 2d matrix mapped to vector!
+        # V = np.random.rand(nrStates,nrActions)
+        V = np.ones((nrStates,nrActions))
+        #V[finalState,:] = 0
+        errors = {i:list() for i in range(nrStates*nrActions)}  # 2d matrix mapped to vector! J: Why? Doesn't it only make indexing difficult further on
     elif evaluationMethod == "SARSA":
         V = np.random.rand(nrStates,nrActions)
-        V[finalState,:] = 0
+        # V = np.ones((nrStates,nrActions))
+        #V[finalState,:] = 0
         errors = {i:list() for i in range(nrStates*nrActions)} 
-        currentState = startState
-        action = env.action_space.sample() #TODO # needs to be initialized for SARSA
+        #currentState = startState
+        action = env.action_space.sample()  #TODO needs to be initialized for SARSA 
+                                            #J: but this is fine right?
         
         
     # Run game nrEpisodes times
@@ -77,8 +90,9 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod, epsilon = 0, pr
                 env.render()
                 
             # Evaluate policy
+            #Temporal difference:
             if evaluationMethod == "TD":
-                action = env.action_space.sample()
+                action = env.action_space.sample() #TODO depending on policy?
                 
                 # Take chosen action, visit new state and obtain reward
                 newState, reward, done, info = env.step(action)
@@ -87,28 +101,29 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod, epsilon = 0, pr
                 tempValue = V[currentState]
                 V[currentState] += alpha*(reward + gamma*V[newState] - V[currentState]) # S: or should we work with a np copy of V (like in tutorial)?
                 errors[currentState].append(float(np.abs(tempValue-V[currentState])))
+            
+            #Q-learning:
             elif evaluationMethod == "Q":
-                if np.random.rand() > epsilon: # with probability 1-epsilon, choose current best option
-                    action = np.argmax(V[currentState,:])
-                else: # with probability epsilon, choose greedily
-                    action = np.random.randint(4)
+                action = epsGreedy(V, currentState, epsilon = epsilon)
                 
                 newState, reward, done, info = env.step(action)
             
                 tempValue = V[currentState, action]
                 a_max = np.argmax(V[newState,:]) # find optimal new action
-                V[currentState,:] += alpha*(reward + gamma*V[newState,a_max] - V[currentState, action])
-                errors[currentState*nrActions + action].append(float(np.abs(tempValue-V[currentState, action]))) # S: same errors as TD ??
+                V[currentState,:] += alpha*(reward + gamma*V[newState,a_max] - V[currentState, action]) 
+                errors[currentState*nrActions + action].append(float(np.abs(tempValue-V[currentState, action]))) #TODO S: same errors as TD ??
+                #J: In this formulation yes; but errors are not actually equal as they depend on the update. 
+                #TODO Also, error now changes with alpha, book does not do this; what should we take?
                 
+            #SARSA:
             elif evaluationMethod == "SARSA":
-                if np.random.rand() > epsilon: action = np.argmax(V[currentState,:])
-                else: action = np.random.randint(4)
+                action = epsGreedy(V, currentState, epsilon = epsilon)
                 newState, reward, done, info = env.step(action)
-                if np.random.rand() > epsilon: newAction = np.argmax(V[newState,:])
-                else: newAction = np.random.randint(4)
+                newAction = epsGreedy(V, newState, epsilon = epsilon)
+                
                 tempValue = V[currentState, action]
                 V[currentState,action] += alpha*(reward + gamma*V[newState,newAction] - V[currentState, action])
-                errors[currentState*nrActions + action].append(float(np.abs(tempValue-V[currentState, action]))) # S: same errors as TD ??
+                errors[currentState*nrActions + action].append(float(np.abs(tempValue-V[currentState, action]))) #TODO S: same errors as TD ??
                 action = newAction 
               
             # Update state
@@ -129,173 +144,11 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod, epsilon = 0, pr
             # See https://medium.com/analytics-vidhya/solving-the-frozenlake-environment-from-openai-gym-using-value-iteration-5a078dffe438
             # policy = updatePolicy(...)
             
-            
-               
-        
-#         env.close() S: what does this do?
-    
-        
-        
-    
-
+            #J: is this still relevant? At least for Q and SARSA, policy is defined by Q (V) and hence implicitly updated
+         
+#         env.close() S: what does this do? J: I think this only matters if gym opens another window
+ 
     return V, errors, gameDurations, np.asarray(gamesWon)
-
-
-# def TD(nrEpisodes, alpha, gamma, policy = None, printSteps=True): 
-#     ''' Runs TD(0) algorithm for given number of episodes to estimate value function V '''
-    
-#     V = np.zeros(nrStates) #TODO probably initialise this inside TD, not here
-#     V[finalState] = 1
-#     errPerState = {i:list() for i in range(nrStates)} # keeps track of error in each state.
-#     # (note that tracking all errors in one list does not make sense, since some states
-#     #  are visited more often earlier on and thus already show some convergence.)
-#     for n in range(nrEpisodes):
-#         env.reset() # Reset game to initial state
-#         state = 0
-#         t = 0
-#         # Run the game
-#         while True:
-#             if printSteps: env.render()
-            
-#             # Choose action 
-#             if policy == None:
-#                 action = env.action_space.sample() #choose random action
-#             else: 
-#                 action = policy[state] #follow policy
-            
-#             # Take chosen action, visit new state and obtain reward
-#             newState, reward, done, info = env.step(action)
-            
-#             # Update V and keep track of errors:
-#             err = reward + gamma * V[newState] - V[state]
-#             V[state] += alpha * err
-#             errPerState[state].append(err) # TODO: now all negative... but at least converging
-#             #not too happy with appending, but cannot know in advance how long it will become
-
-
-
-#             #also, is the indexing correct? Book mentions this error is not available until next timestep (below eq 6.5)
-
-
-
-                # S: We are working with 2 time steps (t+1 and t) or do you mean something else?
-            
-            
-#             #TODO: sometimes, done like this: see e.g. https://towardsdatascience.com/reinforcement-learning-rl-101-with-python-e1aa0d37d43b
-#             # old = V[state] # must be stored here, for the case state = newState
-#             # V[newState] += alpha * (reward + gamma * V[final] - V[newState])
-            
-#             # # Keep track of errors: now all negative... but at least converging
-#             # TDerrPerState[state].append(reward + gamma*V[newState] - old)
-                
-#             state = newState
-#             t += 1
-            
-#             if printSteps: 
-#                 print("At time", t, ", we obtained reward", reward, ", and visited:", newState, "\n")
-#                 # print("Next action:", actions[action])
-            
-#             if done:
-#                 if printSteps: print(f"Episode finished after {t+1} timesteps" )
-#                 break
-        
-#         env.close()
-#     return V, errPerState
-
-
-# ### Q-learning: ###
-# #after Sutton & Barto, p131
-
-# def Qlearning(nrEpisodes, alpha, gamma, epsilon, printSteps=True):
-#     errPerState = {i:list() for i in range(nrStates)} # keeps track of error in each state.
-#     for n in range(nrEpisodes):
-#         env.reset() # Reset environment every episode?
-#         state = 0
-#         t = 0
-        
-#         # Run the game
-#         while True:
-#             if printSteps: env.render()
-            
-#             #Choose action using eps-greedy policy from Q
-#             if np.random.rand() >= epsilon: # with probability 1-epsilon, choose greedily
-#                 action = np.argmax(Q[state,:]) 
-#             else: # with probability epsilon, do not choose greedy
-#                 action = env.action_space.sample() #chooses random action
-            
-#             # Take chosen action, visit new state and obtain reward
-#             newState, reward, done, info = env.step(action)
-            
-#             # Update Q and save error to state:
-#             err = reward + gamma * np.max(Q[newState,:]) - Q[state, action]
-#             Q[state, action] += alpha * err
-#             errPerState[state].append(err)
-                
-#             state = newState
-#             t += 1
-            
-#             if printSteps: 
-#                 print("At time", t, ", we obtained reward", reward, ", and visited:", newState, "\n")
-#                 # print("Next action:", actions[action])
-            
-#             if done:
-#                 if printSteps: print("Episode finished" )
-#                 break
-        
-#         env.close()
-#     return Q, errPerState
-
-
-
-# ### SARSA: ###
-# #after Sutton & Barto, p130
-
-# def SARSA(nrEpisodes, alpha, gamma, epsilon, printSteps=True):
-#     errPerStateAction = {(i,a):list() for i in range(nrStates) for a in range(4)} # keeps track of error in each state.
-#     for n in range(nrEpisodes):
-#         env.reset() # Reset environment every episode?
-#         t = 0
-        
-#         #state-action initialisation (action choice is epsilon-greedy):
-#         state = 0
-#         if np.random.rand() >= epsilon: 
-#             action = np.argmax(Q[state,:]) 
-#         else: 
-#             action = env.action_space.sample()
-        
-#         # Run the game
-#         while True:
-#             if printSteps: env.render()
-            
-#             newState, reward, done, info = env.step(action)
-            
-#             #Choose action using eps-greedy policy from Q
-#             if np.random.rand() >= epsilon: # with probability 1-epsilon, choose greedily
-#                 newAction = np.argmax(Q[newState,:]) 
-#             else: # with probability epsilon, do not choose greedy
-#                 newAction = env.action_space.sample() #chooses random action
-            
-#             # Take chosen action, visit new state and obtain reward
-            
-#             # Update Q and save error to state:
-#             err = reward + gamma * Q[newState,newAction] - Q[state, action]
-#             Q[state, action] += alpha * err
-#             errPerStateAction[state,action].append(err)
-                
-#             state = newState
-#             action = newAction
-#             t += 1
-            
-#             if printSteps: 
-#                 print("At time", t, ", we obtained reward", reward, ", and visited:", newState, "\n")
-#                 # print("Next action:", actions[action])
-            
-#             if done:
-#                 if printSteps: print("Episode finished" )
-#                 break
-        
-#         env.close()
-#     return Q, errPerStateAction
 
 
 
@@ -333,49 +186,65 @@ def plotLearningCurve(gamesWon, title):
     plt.savefig("FrozenLakeLC-"+title+".pdf", bbox_inches = 'tight')
 
 
+# Quality check of final policy
+def averagePerformance(Q, policy = epsGreedy): 
+    '''Performs same policy over and over to measure accuracy
+    
+    Especially meant to test final policy developed during simulation'''
+    totalRewards = 0
+    nrGames = 1000
+    
+    for i in range(nrGames):
+        done = False
+        state = env.reset()
+        
+        while not done: 
+            action = policy(Q, state)
+            state, reward, done, info = env.step(action)
+            totalRewards += reward
+    
+    return totalRewards/nrGames #TODO sth with confidence intervals (also for other analyses)
+
+
 # Summary
-def printGameSummary(durations):
+def printGameSummary(durations, evaluationMethod):
     print(evaluationMethod,":")
-    print(f"Percentage of games won: {len(durations)/nrEpisodes*100}")
+    print(f"Percentage of games won: {(len(durations)/nrEpisodes)*100}")
     print(f"Average duration winning game: {np.mean(durations)} steps")
+
+
 
 ### Execution ###
 createEnv()
 
-nrEpisodes = 5000
-alpha = 0.1 # stepsize
-gamma = 0.1 # discounting rate; may differ per state and iteration
-eps = 0.1
+nrEpisodes = 50000
+alpha = 0.02 # stepsize
+gamma = 1 # discounting rate; may differ per state and iteration
+eps = 0.05
 
 def runSimulation(evaluationMethod):
+    global Q, durations, gamesWon
     Q, errors, durations, gamesWon = policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod = "SARSA", epsilon = eps, printSteps = False)
     plotFromDict(errors, evaluationMethod)
     plotLearningCurve(gamesWon, evaluationMethod)
-    printGameSummary(durations)
+    printGameSummary(durations, evaluationMethod)
 
 
-# TD: 
-evaluationMethod = "TD"
-runSimulation(evaluationMethod)
+# # TD: 
+# evaluationMethod = "TD"
+# runSimulation(evaluationMethod)
+# print(averagePerformance(Q))
 
-# Q-learning:
-evaluationMethod = "Q"
-runSimulation(evaluationMethod)
+# # Q-learning:
+# evaluationMethod = "Q"
+# runSimulation(evaluationMethod)
+# print(averagePerformance(Q))
 
 # SARSA:
 evaluationMethod = "SARSA"
 runSimulation(evaluationMethod)
+print(averagePerformance(Q))
 
 
 
 
-### Currently unused: ###
-
-#Could also opt for actual square representation?
-def getCoordinate(index, gridsize):
-    '''Takes location index and turns it into grid coordinate '''
-    return (index // gridsize, index % gridsize) # // is floor division
-
-# V = np.zeros((4,4)) #book says to initialise arbitrarily except for terminal states (for which V is 0)
-# returns = np.zeros((4,4))
-# d = np.zeros((4,4))
