@@ -8,11 +8,6 @@ import numpy as np
 import gym
 from matplotlib import pyplot as plt 
 
-
-###TODO###
-# Initialisatie van V en Q functies/arrays zijn nu nog 1 voor goal, 0 voor de rest. Geen idee of dat klopt
-# Error plots zijn alleen nog maar constant 0. Bij TD leek er wel iets op convergence toen ik een andere methode dan in het boek gebruikte, maar geen idee of en waarom die klopt
-
 ### Initialise game settings etc.
 def createEnv(size = 4): 
     '''
@@ -47,22 +42,13 @@ def createEnv(size = 4):
     startState = 0
     finalState = nrStates - 1
     returns = np.zeros(nrStates)
-        
-def chooseAction(env, policy, V, currentState, epsilon = 0):
-    if policy == "random": # random
-        action = env.action_space.sample()
-    elif policy == "greedy": # eps-greedy
-        if np.random.rand() >= epsilon: # with probability 1-epsilon, choose greedily
-            action = np.argmax(V[currentState,:]) 
-        else: # with probability epsilon, do not choose greedy
-            action = env.action_space.sample() # TODO someting else!
-            
-    return action
                     
-def policyEvaluation(nrEpisodes, alpha, gamma, policy, evaluationMethod, epsilon = 0, printSteps = True): 
+def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod, epsilon = 0, printSteps = True): 
     
     gameDurations = [] # for analysis
+    gamesWon = []
     
+    # Initialize value function and error lists
     if evaluationMethod == "TD":
         V = np.random.rand(nrStates) 
         V[finalState] = 0
@@ -76,38 +62,50 @@ def policyEvaluation(nrEpisodes, alpha, gamma, policy, evaluationMethod, epsilon
         V[finalState,:] = 0
         errors = {i:list() for i in range(nrStates*nrActions)} 
         currentState = startState
-        action = chooseAction(env, policy, V, currentState, epsilon)  # needs to be initialized for SARSA
+        action = env.action_space.sample() #TODO # needs to be initialized for SARSA
         
         
     # Run game nrEpisodes times
     for n in range(nrEpisodes):
         currentState = env.reset() # reset game to initial state
+        done = False
+        t=0
         
         # Run one game
-        for t in range(1000): # perform maximally 1000 steps 
+        while not(done):
             if printSteps: 
                 env.render()
-            
+                
             # Evaluate policy
-            if evaluationMethod == "TD" or evaluationMethod == "Q":
-                # Choose action based on policy
-                action = chooseAction(env, policy, V, currentState, epsilon) 
-        
+            if evaluationMethod == "TD":
+                action = env.action_space.sample()
+                
                 # Take chosen action, visit new state and obtain reward
                 newState, reward, done, info = env.step(action)
                 
-                if evaluationMethod == "TD":
-                    tempValue = V[currentState]
-                    V[currentState] += alpha*(reward + gamma*V[newState] - V[currentState]) # S: or should we work with a np copy of V (like in tutorial)?
-                    errors[currentState].append(float(np.abs(tempValue-V[currentState])))
-                elif evaluationMethod == "Q":
-                    tempValue = V[currentState, action]
-                    V[currentState,:] += alpha*(reward + gamma*np.max(V[newState,:]) - V[currentState, action])
-                    errors[currentState*nrActions + action].append(float(np.abs(tempValue-V[currentState, action]))) # S: same errors as TD ??
+                # Update value function
+                tempValue = V[currentState]
+                V[currentState] += alpha*(reward + gamma*V[newState] - V[currentState]) # S: or should we work with a np copy of V (like in tutorial)?
+                errors[currentState].append(float(np.abs(tempValue-V[currentState])))
+            elif evaluationMethod == "Q":
+                if np.random.rand() > epsilon: # with probability 1-epsilon, choose current best option
+                    action = np.argmax(V[currentState,:])
+                else: # with probability epsilon, choose greedily
+                    action = np.random.randint(4)
+                
+                newState, reward, done, info = env.step(action)
+            
+                tempValue = V[currentState, action]
+                a_max = np.argmax(V[newState,:]) # find optimal new action
+                V[currentState,:] += alpha*(reward + gamma*V[newState,a_max] - V[currentState, action])
+                errors[currentState*nrActions + action].append(float(np.abs(tempValue-V[currentState, action]))) # S: same errors as TD ??
                 
             elif evaluationMethod == "SARSA":
+                if np.random.rand() > epsilon: action = np.argmax(V[currentState,:])
+                else: action = np.random.randint(4)
                 newState, reward, done, info = env.step(action)
-                newAction = chooseAction(env, policy, V, newState, epsilon)
+                if np.random.rand() > epsilon: newAction = np.argmax(V[newState,:])
+                else: newAction = np.random.randint(4)
                 tempValue = V[currentState, action]
                 V[currentState,action] += alpha*(reward + gamma*V[newState,newAction] - V[currentState, action])
                 errors[currentState*nrActions + action].append(float(np.abs(tempValue-V[currentState, action]))) # S: same errors as TD ??
@@ -115,17 +113,16 @@ def policyEvaluation(nrEpisodes, alpha, gamma, policy, evaluationMethod, epsilon
               
             # Update state
             currentState = newState
+            t += 1
             
-            # Print results if desired
-            if printSteps:
-                directions =  ["L", "D", "R", "U"]
-                print("At time", t, ", we obtain reward", reward, ", choose ", directions[action], " and move to:", newState, "\n")
-                
-            if done:
-                if printSteps: print(f"Episode finished after {t+1} timesteps" )
-                if reward == 1: # won game
-                    gameDurations.append(t+1)
-                break 
+        # Print results if desired
+        if printSteps:
+            directions =  ["L", "D", "R", "U"]
+            print("At time", t, ", we obtain reward", reward, ", choose ", directions[action], " and move to:", newState, "\n")
+        
+        if printSteps: print(f"Episode finished after {t+1} timesteps" )
+        if reward == 1: gameDurations.append(t+1) # won the game
+        gamesWon.append(reward)
             
             # Update policy using value function
             # Now that we have the value function of all the states, our next step is to extract the policy from the Value Function.
@@ -141,7 +138,7 @@ def policyEvaluation(nrEpisodes, alpha, gamma, policy, evaluationMethod, epsilon
         
     
 
-    return V, errors, gameDurations
+    return V, errors, gameDurations, np.asarray(gamesWon)
 
 
 # def TD(nrEpisodes, alpha, gamma, policy = None, printSteps=True): 
@@ -303,7 +300,8 @@ def policyEvaluation(nrEpisodes, alpha, gamma, policy, evaluationMethod, epsilon
 
 
 
-### Plot error ###
+### Analysis ###
+# Error
 def plotFromDict(errorDict, title = ""): 
     plt.clf() # Clears current figure
     plt.rcParams.update({'font.size': 12})
@@ -317,35 +315,56 @@ def plotFromDict(errorDict, title = ""):
     plt.ylabel('Error')
     plt.title(title)
     plt.show()
-    plt.savefig("FrozenLake-"+title+".pdf", bbox_inches = 'tight')
+    plt.savefig("FrozenLakeError-"+title+".pdf", bbox_inches = 'tight')
+    
+# Learning curve
+def plotLearningCurve(gamesWon, title): 
+    plt.clf()
+    plt.rcParams.update({'font.size': 12})
+    
+    x = np.arange(1,nrEpisodes+1)
+    y = np.cumsum(gamesWon, dtype=float)/x
+    plt.plot(x,y)
+    
+    plt.xlabel('Episode')
+    plt.ylabel('Average reward per episode')
+    plt.title('Learning cursve '+title)
+    plt.show()
+    plt.savefig("FrozenLakeLC-"+title+".pdf", bbox_inches = 'tight')
 
+
+# Summary
 def printGameSummary(durations):
+    print(evaluationMethod,":")
     print(f"Percentage of games won: {len(durations)/nrEpisodes*100}")
     print(f"Average duration winning game: {np.mean(durations)} steps")
 
 ### Execution ###
 createEnv()
 
-nrEpisodes = 1000
+nrEpisodes = 5000
 alpha = 0.1 # stepsize
 gamma = 0.1 # discounting rate; may differ per state and iteration
 eps = 0.1
 
+def runSimulation(evaluationMethod):
+    Q, errors, durations, gamesWon = policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod = "SARSA", epsilon = eps, printSteps = False)
+    plotFromDict(errors, evaluationMethod)
+    plotLearningCurve(gamesWon, evaluationMethod)
+    printGameSummary(durations)
+
+
 # TD: 
-# TODO what policy??
-V, errors, durations = policyEvaluation(nrEpisodes, alpha, gamma, policy = "random", evaluationMethod = "TD", printSteps = False) # optional argument: printSteps
-plotFromDict(errors, title = "TD")
-printGameSummary(durations)
+evaluationMethod = "TD"
+runSimulation(evaluationMethod)
 
 # Q-learning:
-Q, errors, durations = policyEvaluation(nrEpisodes, alpha, gamma, policy = "greedy", evaluationMethod = "Q", epsilon = eps, printSteps = False)
-plotFromDict(errors, title = "Q")
-printGameSummary(durations)
+evaluationMethod = "Q"
+runSimulation(evaluationMethod)
 
 # SARSA:
-Q, errors, durations = policyEvaluation(nrEpisodes, alpha, gamma, policy = "greedy", evaluationMethod = "SARSA", epsilon = eps, printSteps = False)
-plotFromDict(errors, title = "SARSA")
-printGameSummary(durations)
+evaluationMethod = "SARSA"
+runSimulation(evaluationMethod)
 
 
 
