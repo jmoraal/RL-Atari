@@ -83,8 +83,10 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod, epsilon = 0, pr
     if evaluationMethod == "TD":
         #V = np.random.rand(nrStates) 
         # V = np.ones(nrStates)
+        # V[finalState] = 0
+        
         V = np.zeros(nrStates) #TODO maybe this one does have to initialise to 0? See website
-        V[finalState] = 0
+        V[finalState] = 1
         errors = {i:list() for i in range(nrStates)}  # keeps track of error in each state
     elif evaluationMethod == "Q":
         # V = np.random.rand(nrStates,nrActions)
@@ -132,10 +134,11 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod, epsilon = 0, pr
                 action = epsGreedy(V, currentState, epsilon = epsilon)
                 
                 newState, reward, done, info = env.step(action)
-            
+                
                 tempValue = V[currentState, action]
-                a_max = np.argmax(V[newState,:]) # find optimal new action
-                V[currentState,:] += alpha*(reward + gamma*V[newState,a_max] - V[currentState, action]) 
+                tempMax = np.max(V[newState,:])
+                V[currentState,action] += alpha*(reward + gamma*tempMax - V[currentState, action])
+                    
                 errors[currentState*nrActions + action].append(float(np.abs(tempValue-V[currentState, action]))) #TODO S: same errors as TD ??
                 #J: In this formulation yes; but errors are not actually equal as they depend on the update. 
                 #TODO Also, error now changes with alpha, book does not do this; what should we take?
@@ -165,14 +168,16 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod, epsilon = 0, pr
         gamesWon[n] = reward
         
         
-        if (evaluationMethod == "SARSA" or evaluationMethod == "Q"): 
-            interval = nrEpisodes//progressPoints
-            if ((n+1) % interval == 0): #Print progress given number of times (evenly distributed)
+        interval = nrEpisodes//progressPoints
+        if ((n+1) % interval == 0): #Print progress given number of times (evenly distributed)
+            if (evaluationMethod == "SARSA" or evaluationMethod == "Q"): 
                 _, ratio = averagePerformance(V) # Note: significantly slows down iteration as this function iterates the game a few hundred times
                                                  # Still, deemed an important progress measure
                                                  #TODO? Maybe can be replaced by sliding-window type average (instead of running average as we use now in evaluation)
                 winRatios[n//interval] = ratio
                 print(f"{n+1} out of {nrEpisodes}, current win ratio is {ratio:3.4f}")
+            else: 
+                print(f"{n+1} out of {nrEpisodes}")
         
             
             # Update policy using value function
@@ -273,10 +278,10 @@ def runSimulation(evaluationMethod):
 # evaluationMethod = "TD"
 # runSimulation(evaluationMethod)
 
-# # Q-learning:
-# evaluationMethod = "Q"
-# runSimulation(evaluationMethod)
-
-# SARSA:
-evaluationMethod = "SARSA"
+# Q-learning:
+evaluationMethod = "Q"
 runSimulation(evaluationMethod)
+
+# # SARSA:
+# evaluationMethod = "SARSA"
+# runSimulation(evaluationMethod)
