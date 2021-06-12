@@ -7,6 +7,7 @@ Created on Thu Jun  3 17:05:05 2021
 import numpy as np
 import gym
 from matplotlib import pyplot as plt 
+np.random.seed(1964)
 
 ### Initialise game settings etc.
 def createEnv(size = 4): 
@@ -43,7 +44,6 @@ def createEnv(size = 4):
     finalState = nrStates - 1
     returns = np.zeros(nrStates)
 
-
 def epsGreedy(Q, state, epsilon = 0.05): 
     ''' Makes epsilon-greedy choice for action given state and value table'''
     if np.random.rand() > epsilon: # with probability 1-epsilon, choose current best option greedily
@@ -51,26 +51,29 @@ def epsGreedy(Q, state, epsilon = 0.05):
     else: # with probability epsilon, choose randomly
         return env.action_space.sample()
 
+def greedy(Q, state):
+    ''' Makes greedy choice for action given state and value table'''
+    return np.argmax(Q[state,:])
 
 # Quality check of given policy
-# def averagePerformance(Q, policy = epsGreedy): 
-#     '''Performs same policy over and over to measure accuracy
+def averagePerformance(Q, policy = greedy): 
+    '''Performs same policy over and over to measure accuracy
     
-#     Especially meant to test final policy developed during simulation'''
-#     nrGames = 1000
-#     rewards = np.zeros(nrGames)
+    Especially meant to test final policy developed during simulation'''
+    nrGames = 1000
+    rewards = np.zeros(nrGames)
     
-#     for i in range(nrGames):
-#         done = False
-#         state = env.reset()
+    for i in range(nrGames):
+        done = False
+        state = env.reset()
         
-#         while not done: 
-#             action = policy(Q, state)
-#             state, reward, done, info = env.step(action)
+        while not done: 
+            action = policy(Q, state)
+            state, reward, done, info = env.step(action)
         
-#         rewards[i] = reward
+        rewards[i] = reward
     
-#     return np.mean(rewards), np.std(rewards) #TODO sth with confidence intervals (also for other analyses)
+    return np.mean(rewards), np.std(rewards) #TODO sth with confidence intervals (also for other analyses)
 
 ## Main function: policy evaluation/improvement                    
 def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, printSteps = True): 
@@ -87,27 +90,19 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, p
         errors = {i:list() for i in range(nrStates)}  # keeps track of error in each state
         valueUpdates[:,0] = V
     elif evaluationMethod == "Q":
-        # V = np.random.rand(nrStates,nrActions)
         V = np.ones((nrStates,nrActions))
         errors = {i:list() for i in range(nrStates*nrActions)}  # 2d matrix mapped to vector! J: Why? Doesn't it only make indexing difficult further on
     elif evaluationMethod == "SARSA":
-        # V = np.random.rand(nrStates,nrActions)
         V = np.ones((nrStates,nrActions))
-        
-        #V = np.zeros((nrStates,nrActions))
-        #V[finalState,:] = 1
-        
         errors = {i:list() for i in range(nrStates*nrActions)} 
-        #currentState = startState
-        action = env.action_space.sample()  #TODO needs to be initialized for SARSA 
-                                            #J: but this is fine right?
-        
+        action = env.action_space.sample()  # needs to be initialized for SARSA
         
     # Run game nrEpisodes times
     for n in range(nrEpisodes):
         currentState = env.reset() # reset game to initial state
         done = False
         t=0
+    
         
         # Run one game
         while not(done):
@@ -137,19 +132,19 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, p
                 tempMax = np.max(V[newState,:])
                 V[currentState,action] += alpha*(reward + gamma*tempMax - tempValue)
                     
-                errors[currentState*nrActions + action].append(float(np.abs(tempValue-V[currentState, action]))) #TODO S: same errors as TD ??
+                errors[currentState*nrActions + action].append(float(np.abs(tempValue-V[currentState, action]))) # TODO or different error?
                 #J: In this formulation yes; but errors are not actually equal as they depend on the update. 
                 #TODO Also, error now changes with alpha, book does not do this; what should we take?
                 
             #SARSA:
             elif evaluationMethod == "SARSA":
-                action = epsGreedy(V, currentState, epsilon = epsilon)
+                # action = epsGreedy(V, currentState, epsilon = epsilon)
                 newState, reward, done, info = env.step(action)
                 newAction = epsGreedy(V, newState, epsilon = epsilon)
                 
                 tempValue = V[currentState, action]
-                V[currentState,action] += alpha*(reward + gamma*V[newState,newAction] - tempValue)
-                errors[currentState*nrActions + action].append(float(np.abs(tempValue-V[currentState, action]))) #TODO S: same errors as TD ??
+                V[currentState,action] += alpha*(reward + gamma*V[newState,newAction] - V[currentState, action])
+                errors[currentState*nrActions + action].append(float(np.abs(tempValue-V[currentState, action]))) # TODO or different error?
                 action = newAction 
               
             # Update state
@@ -165,41 +160,33 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, p
         if reward == 1: gameDurations.append(t+1) # won the game
         gamesWon[n] = reward
         
-        
         interval = nrEpisodes//progressPoints
         if ((n+1) % interval == 0): #Print progress given number of times (evenly distributed)
-            print(f"{n+1} out of {nrEpisodes}")
-            
+            epsilon *= decay_rate
+            epsilon = max(epsilon, min_epsilon)
+    
             if evaluationMethod == "TD":
                 valueUpdates[:,counter] = V #TODO kan wss netter dan met die counter
                 counter += 1
-            # if (evaluationMethod == "SARSA" or evaluationMethod == "Q"): 
-            #     _, ratio = averagePerformance(V) # Note: significantly slows down iteration as this function iterates the game a few hundred times
-            #                                      # Still, deemed an important progress measure
-            #                                      #TODO? Maybe can be replaced by sliding-window type average (instead of running average as we use now in evaluation)
-            #     winRatios[n//interval] = ratio
-            #     print(f"{n+1} out of {nrEpisodes}, current win ratio is {ratio:3.4f}")
-            # else: 
-                # print(f"{n+1} out of {nrEpisodes}")
-        
-            
-            # Update policy using value function
-            # Now that we have the value function of all the states, our next step is to extract the policy from the Value Function.
-            # See https://medium.com/analytics-vidhya/solving-the-frozenlake-environment-from-openai-gym-using-value-iteration-5a078dffe438
-            # policy = updatePolicy(...)
-            
-            #J: is this still relevant? At least for Q and SARSA, policy is defined by Q (V) and hence implicitly updated
+            if (evaluationMethod == "SARSA" or evaluationMethod == "Q"): 
+                ratio, _ = averagePerformance(V) # Note: significantly slows down iteration as this function iterates the game a few hundred times
+                                                  # Still, deemed an important progress measure
+                                                  #TODO? Maybe can be replaced by sliding-window type average (instead of running average as we use now in evaluation)
+                winRatios[n//interval] = ratio
+                print(f"{n+1} out of {nrEpisodes}, current win ratio is {ratio:3.4f}. eps {epsilon}")
+            else: 
+                print(f"{n+1} out of {nrEpisodes}")
          
     return V, valueUpdates, errors, gameDurations, np.asarray(gamesWon), winRatios
 
-
-
-
 ### Analysis ###
-# Error
-def plotFromDict(errorDict, title = ""): 
+def plotInitialize():
     plt.clf() # Clears current figure
+    plt.figure(figsize=(10,5))
     plt.rcParams.update({'font.size': 12})
+    
+def plotFromDict(errorDict, title = ""): 
+    plotInitialize()
     
     # Errors per state or state,action pair: (inspired by https://towardsdatascience.com/reinforcement-learning-rl-101-with-python-e1aa0d37d43b)
     errorLists = [list(x)[:nrEpisodes] for x in errorDict.values()]
@@ -209,29 +196,12 @@ def plotFromDict(errorDict, title = ""):
     plt.xlabel('Number of Visits')
     plt.ylabel('Error')
     plt.title('Error')
-    plt.show()
+    # plt.show()
     plt.savefig("FrozenLakeError-"+title+".pdf", bbox_inches = 'tight')
-    
-# Learning curve
-def plotLearningCurve(gamesWon, title): 
-    plt.clf()
-    plt.rcParams.update({'font.size': 12})
-    
-    x = np.arange(1,nrEpisodes+1)
-    y = np.cumsum(gamesWon, dtype=float)/x
-    plt.plot(x,y)
-    
-    plt.xlabel('Episode')
-    plt.ylabel('Average reward per episode')
-    plt.title('Learning curve '+title)
-    plt.show()
-    plt.savefig("FrozenLakeLC-"+title+".pdf", bbox_inches = 'tight')
-
 
 # Winning ratio development over time
-def plotWinRatios(winRatios, title, interval): 
-    plt.clf()
-    plt.rcParams.update({'font.size': 12})
+def plotWinRatios(winRatios, title, interval): # more informative method than learning curve!
+    plotInitialize()
     
     x = np.arange(nrEpisodes//interval)*interval
     y = winRatios
@@ -240,23 +210,23 @@ def plotWinRatios(winRatios, title, interval):
     plt.xlabel('Episode')
     plt.ylabel('Average reward per episode')
     plt.title('Learning curve '+title)
-    plt.show()
-    plt.savefig("FrozenLakeLC-"+title+".pdf", bbox_inches = 'tight')
+    # plt.show()
+    plt.savefig("FrozenLakeWR-"+title+".pdf", bbox_inches = 'tight')
 
+# Value function for TD learning
 def plotValueUpdates(valueUpdates, trueV): # exclude final state 15 since this is not interesting 
-    plt.clf()
-    plt.rcParams.update({'font.size': 12})
+    plotInitialize()
     
-    for i in range(4):
-        plt.plot(valueUpdates[0:nrStates-1,i], label = i*nrEpisodes//progressPoints)
-    plt.plot(trueV[0:nrStates-1], label = "True")
+    for i in range(progressPoints):
+        plt.plot(valueUpdates[0:nrStates-1,i], label = i*nrEpisodes//progressPoints, marker = 'o', markeredgewidth = .5)
+    plt.plot(trueV[0:nrStates-1], label = "True", marker = 's', markeredgewidth = 1)
     # plt.plot(valueUpdates)
     # plt.plot(trueV)
     
     plt.xlabel('State')
     plt.ylabel('')
     plt.title('Value updates')
-    plt.show()
+    # plt.show()
     plt.legend()#prop={'size': 16})
     plt.savefig("FrozenLakeVU.pdf", bbox_inches = 'tight')
 
@@ -273,56 +243,45 @@ def printGameSummary(durations, gamesWon, evaluationMethod, winRatios):
 
 
 ### Execution ###
-createEnv()
+createEnv() # create game 
 
-nrEpisodes = 1000000
-alpha = .001 # stepsize
+nrEpisodes = 100000
+alpha = .02 # stepsize
 gamma = 1 # discounting rate; may differ per state and iteration
-eps = .05
-progressPoints = 4
+eps = .9 # initial value
+decay_rate = .5
+min_epsilon = 0.01
+progressPoints = 100
+
 
 def runSimulation(evaluationMethod):
-    global V, valueUpdates, errors, durations, gamesWon, winRatios, progressPoints
+    global V, valueUpdates, errors, durations, gamesWon, winRatios
     V, valueUpdates, errors, durations, gamesWon, winRatios = policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod = evaluationMethod, epsilon = eps, printSteps = False)
-    # plotFromDict(errors, evaluationMethod)
+    plotFromDict(errors, evaluationMethod)
     # plotLearningCurve(gamesWon, evaluationMethod)
     printGameSummary(durations, gamesWon, evaluationMethod, winRatios)
     plotWinRatios(winRatios, evaluationMethod, len(gamesWon)//len(winRatios)) 
+    print(gamesWon)
+    
     if evaluationMethod == "TD":
+        # True value function (computed with Mathematica)
+        V[15]=1
+        trueV = np.array([0.0139398, 0.0116309, 0.020953, 0.0104765, 0.0162487, 0, 0.0407515, 0, 0.0348062, 0.0881699, 0.142053, 0, 0, 0.17582, 0.439291, 1])
         plotValueUpdates(valueUpdates, trueV)
-    #TODO somehow, winning ratio does not seem to get above exactly 0.5 (for SARSA at least). Could mean ratio computation
-    # is wrong, or update rule somehow stops improving (thinks its objective is reached) after that...
+        print("overall error:")
+        print(np.sum(np.abs(V-trueV)))
 
-
-# # TD: 
+# TD: 
 # evaluationMethod = "TD"
-# runSimulation(evaluationMethod)
-# True value function (computed with Mathematica)
-trueV = np.array([0.0139398, 0.0116309, 0.020953, 0.0104765, 0.0162487, 0, 0.0407515, 0, 0.0348062, 0.0881699, 0.142053, 0, 0, 0.17582, 0.439291, 1])
-# V[15]=1
-# print(V)
-# print("overall error:")
-# print(np.sum(np.abs(V-trueV)))
+
 
 # Q-learning:
 evaluationMethod = "Q"
+
+# SARSA:
+# evaluationMethod = "SARSA"      
+
 runSimulation(evaluationMethod)
-# plotFromDict(errors, evaluationMethod)
-plotLearningCurve(gamesWon, evaluationMethod)
-printGameSummary(durations, gamesWon, evaluationMethod, winRatios)
-plotWinRatios(winRatios, evaluationMethod, len(gamesWon)//len(winRatios)) 
 
-# # SARSA:
-# evaluationMethod = "SARSA"
-# runSimulation(evaluationMethod)
-
-# for i in range(0,16):
-#     for j in range(0,4):
-#         print(i,j)
-#         print(env.P[i][j])
-        
-
-
-# plotValueUpdates(valueUpdates, trueV)
 
 
