@@ -101,7 +101,7 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, p
     for n in range(nrEpisodes):
         currentState = env.reset() # reset game to initial state
         done = False
-        t=0
+        t = 0
     
         
         # Run one game
