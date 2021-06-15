@@ -11,39 +11,23 @@ import scipy.stats as st
 np.random.seed(1964)
 
 ### Initialise game settings etc.
-def createEnv(size = 4): 
-    '''
-    Creates frozen lake game environment in 4x4 if unspecified, else 8x8, 
-    and initialises variables for TD, Q-learning and SARSA methods. 
+def createEnv(game, size = 4): 
+    ''' Create game environment from Gym package.'''
+    global nrStates, nrActions, returns, env
     
-    State space: square grid. Locations are numbered from left to right, then 
-    top to bottom, and stored in a list. E.g. in 4x4 version:
-        0  1  2  3
-        4  5  6  7
-        8  9  10 11
-        12 13 14 15
-    Action space: 
-        0   left
-        1   down
-        2   right
-        3   up
+    if game == "Pong":
+        env = gym.make ("Pong-v0")
+        nrStates = 256**(210*160*3)
+        nrActions = 5
+    elif game == "FrozenLake":  
+        if size == 8:
+            env = gym.make ("FrozenLake8x8-v0")
+        else:
+            env = gym.make ("FrozenLake-v0")
         
-    States can be marked S,H,F,G: start, hole, frozen, goal. 
-    Objective is to reach goal (reward 1) from start via frozen tiles; stepping on H means drowning (reward 0).
-    See https://github.com/openai/gym/blob/master/gym/envs/toy_text/frozen_lake.py or https://gym.openai.com/envs/FrozenLake-v0/
-    '''
-    global nrStates, nrActions, startState, finalState, returns, env
-    
-    if size == 8:
-        env = gym.make ("FrozenLake8x8-v0")
-    else:
-        env = gym.make ("FrozenLake-v0")
-        
-    nrStates = env.nS
-    nrActions  = env.nA
-    startState = 0
-    finalState = nrStates - 1
-    returns = np.zeros(nrStates)
+        nrStates = env.nS
+        nrActions  = env.nA
+        returns = np.zeros(nrStates)
 
 def epsGreedy(Q, state, epsilon = 0.05): 
     ''' Makes epsilon-greedy choice for action given state and value table'''
@@ -93,7 +77,7 @@ def policyPerformanceStats(Q, policy = greedy, nrGames = 2000):
     
     return summaryStats(rewards)
 
-## Main function: policy evaluation/improvement                    
+# Main function: policy evaluation/improvement                    
 def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, printSteps = True): 
     
     gameDurations = [] # for analysis
@@ -218,8 +202,8 @@ def plotFromDict(errorDict, title = ""):
     plt.xlabel('Number of Visits')
     plt.ylabel('Error')
     plt.title('Error')
-    #plt.show()
     plt.savefig("FrozenLakeError-"+title+".pdf", bbox_inches = 'tight')
+    plt.show()
 
 # Winning ratio development over time
 def plotWinRatios(winRatios, confIntervals, title, interval): 
@@ -237,8 +221,8 @@ def plotWinRatios(winRatios, confIntervals, title, interval):
     plt.xlabel('Episode')
     plt.ylabel('Average reward per episode')
     plt.title('Learning curve '+title)
-    # plt.show()
     plt.savefig("FrozenLakeWR-"+title+".pdf", bbox_inches = 'tight')
+    plt.show()
 
 # Value function for TD learning
 def plotValueUpdates(valueUpdates, trueV): # exclude final state 15 since this is not interesting 
@@ -253,9 +237,9 @@ def plotValueUpdates(valueUpdates, trueV): # exclude final state 15 since this i
     plt.xlabel('State')
     plt.ylabel('')
     plt.title('Value updates')
-    # plt.show()
     plt.legend()#prop={'size': 16})
     plt.savefig("FrozenLakeVU.pdf", bbox_inches = 'tight')
+    # plt.show()
 
 # Summary
 def printGameSummary(durations, gamesWon, evaluationMethod, winRatios):
@@ -270,16 +254,17 @@ def printGameSummary(durations, gamesWon, evaluationMethod, winRatios):
 
 
 ### Execution ###
-createEnv() # create game 
+game = "Pong"
+# game = "FrozenLake"
+createEnv(game) # create game 
 
 nrEpisodes = 100000
 alpha = .02 # stepsize
 gamma = 1 # discounting rate; may differ per state and iteration
-eps = .9 # initial value
-decay_rate = .5
-min_epsilon = 0.01
-progressPoints = 100
-
+eps = .07 # initial value
+decay_rate = 1
+min_epsilon = 0.07
+progressPoints = 100 # choose 4 for TD, about 100 for others
 
 def runSimulation(evaluationMethod):
     global V, valueUpdates, errors, durations, gamesWon, winRatios, confIntervals
@@ -289,7 +274,6 @@ def runSimulation(evaluationMethod):
                                                                                               printSteps = False)
                                                                                                
     plotFromDict(errors, evaluationMethod)
-    # plotLearningCurve(gamesWon, evaluationMethod)
     printGameSummary(durations, gamesWon, evaluationMethod, winRatios)
     plotWinRatios(winRatios, confIntervals, evaluationMethod, len(gamesWon)//len(winRatios)) 
     print(gamesWon)
@@ -313,12 +297,11 @@ def runSimulation(evaluationMethod):
 # TD: 
 # evaluationMethod = "TD"
 
-
 # Q-learning:
-evaluationMethod = "Q"
+# evaluationMethod = "Q"
 
 # SARSA:
-# evaluationMethod = "SARSA"      
+evaluationMethod = "SARSA"      
 
 runSimulation(evaluationMethod)
 
