@@ -50,7 +50,7 @@ def summaryStats(data, confidence = 0.95):
     return mean, std, confInt
     
 # Quality check of given policy
-def policyPerformanceStats(Q, policy = greedy, nrGames = 2000): 
+def policyPerformanceStats(Q, policy = greedy, nrGames = 500): 
     '''Performs same given policy over and over to measure accuracy, 
     outputs mean, std and confidence interval of mean
     
@@ -81,6 +81,12 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, p
     
     gameDurations = [] # for analysis
     gamesWon = np.zeros(nrEpisodes)
+    
+    if evaluationMethod == "TD":
+        progressPoints = 4
+    else: 
+        progressPoints = 100
+    
     winRatios = np.zeros(progressPoints)
     confIntervals = np.zeros((progressPoints,2))
     valueUpdates = np.zeros([nrStates, progressPoints+1])
@@ -164,13 +170,16 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, p
                 maxAction = greedy(Vdouble[:,:, ind],newState)#np.argmax(Vdouble[newState,:, ind])
                 Vdouble[currentState,action, ind] += alpha*(reward + gamma*Vdouble[newState, maxAction, 1-ind] - tempValue)
                 errors[currentState*nrActions + action].append(float(np.abs(tempValue-Vdouble[currentState, action,ind]))) 
-                
-            
             
             # Update state
             currentState = newState
             t += 1
         
+        #if evaluationMethod == "Janne": 
+            '''idea: keep track of path, remove cycles and do not go to last 
+            state before terminal unless reward is 1.   
+            can we add a penalty to all non-Goal states so that the policy will favour a shorter solution? 
+            '''
         
         # Print results if desired
         if printSteps:
@@ -182,7 +191,7 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, p
         gamesWon[n] = reward
         
         
-        interval = nrEpisodes//progressPoints
+        interval = nrEpisodes//progressPoints #recall that '//' is division without remainder
         if ((n+1) % interval == 0): #Print progress given number of times (evenly distributed)
             epsilon *= decay_rate
             epsilon = max(epsilon, min_epsilon)
@@ -239,7 +248,11 @@ def plotWinRatios(winRatios, confIntervals, title, interval):
     plt.plot(x,y, label = 'Winning ratios', color = 'b')
     
     #confidence intervals:
-    plt.plot(x,confIntervals, label = '95% Confidence intervals', color = 'r', linestyle = '--')
+    plt.plot(x,confIntervals, 
+             label = '95% Confidence intervals', 
+             color = 'r', 
+             linestyle = '--', 
+             linewidth = 1)
     
     plt.xlabel('Episode')
     plt.ylabel('Average reward per episode')
@@ -252,7 +265,10 @@ def plotValueUpdates(valueUpdates, trueV): # exclude final state 15 since this i
     plotInitialize()
     
     for i in range(progressPoints):
-        plt.plot(valueUpdates[0:nrStates-1,i], label = i*nrEpisodes//progressPoints, marker = 'o', markeredgewidth = .5)
+        plt.plot(valueUpdates[0:nrStates-1,i], 
+                 label = i*nrEpisodes//progressPoints, 
+                 marker = 'o', 
+                 markeredgewidth = .5)
     plt.plot(trueV[0:nrStates-1], label = "True", marker = 's', markeredgewidth = 1)
     # plt.plot(valueUpdates)
     # plt.plot(trueV)
@@ -270,18 +286,18 @@ def printGameSummary(durations, gamesWon, evaluationMethod, winRatios):
     print(f"Percentage of games won: {(len(durations)/nrEpisodes)*100}")
     last = gamesWon[-nrEpisodes//10:]
     print(f"Percentage of games won towards end: {np.sum(last)/len(last)*100}")
-    print(f"Average duration winning game: {np.mean(durations)} steps") #wild idea: can we add a penalty to all non-Goal states so that the policy will favour a shorter solution? :D
+    print(f"Average duration winning game: {np.mean(durations)} steps") 
     if (evaluationMethod == "SARSA" or evaluationMethod == "Q"): #TODO not yet working for TD
         print(f"Final winning ratio: {winRatios[-1]}")  
 
 
 
 ### Execution ###
-game = "Pong"
-# game = "FrozenLake"
+# game = "Pong"
+game = "FrozenLake"
 createEnv(game) # create game 
 
-nrEpisodes = 100000
+nrEpisodes = 200000
 alpha = .02 # stepsize
 gamma = 1 # discounting rate; may differ per state and iteration
 eps = .07 # initial value
