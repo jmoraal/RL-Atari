@@ -7,6 +7,7 @@ Created on Thu Jun  3 17:05:05 2021
 import numpy as np
 import gym
 from matplotlib import pyplot as plt 
+import scipy.stats as st
 np.random.seed(1964)
 
 ### Initialise game settings etc.
@@ -55,25 +56,42 @@ def greedy(Q, state):
     ''' Makes greedy choice for action given state and value table'''
     return np.argmax(Q[state,:])
 
-# Quality check of given policy
-def averagePerformance(Q, policy = greedy): 
-    '''Performs same policy over and over to measure accuracy
+
+def summaryStats(data, confidence = 0.95): 
+    mean = np.mean(data)
+    std = np.std(data)
+    confInt = st.t.interval(0.95, len(data)-1, loc=mean, scale=std/np.sqrt(len(data))) 
+    #(here scale equals standard error; could use st.sem() for this, but is slower:)
+    # confInt = st.t.interval(0.95, len(data)-1, loc=mean, scale=st.sem(data)) 
     
-    Especially meant to test final policy developed during simulation'''
-    nrGames = 1000
+    return mean, std, confInt
+    
+# Quality check of given policy
+def policyPerformanceStats(Q, policy = greedy, nrGames = 2000): 
+    '''Performs same given policy over and over to measure accuracy, 
+    outputs mean, std and confidence interval of mean
+    
+    2000 games is enough for an indication of progress; much more would 
+    slow down the iteration loop too much. 
+    
+    For narrow confidence interval to evaluate final policy, 
+    set nrGames to higher value '''
+    
     rewards = np.zeros(nrGames)
     
     for i in range(nrGames):
         done = False
         state = env.reset()
+        gameReward = 0
         
         while not done: 
             action = policy(Q, state)
-            state, reward, done, info = env.step(action)
+            state, stepReward, done, info = env.step(action)
+            gameReward += stepReward
         
-        rewards[i] = reward
+        rewards[i] = gameReward
     
-    return np.mean(rewards), np.std(rewards) #TODO sth with confidence intervals (also for other analyses)
+    return summaryStats(rewards)
 
 ## Main function: policy evaluation/improvement                    
 def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, printSteps = True): 
@@ -81,6 +99,7 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, p
     gameDurations = [] # for analysis
     gamesWon = np.zeros(nrEpisodes)
     winRatios = np.zeros(progressPoints)
+    confIntervals = np.zeros((progressPoints,2))
     valueUpdates = np.zeros([nrStates, progressPoints+1])
     counter = 1
     
@@ -169,15 +188,18 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, p
                 valueUpdates[:,counter] = V #TODO kan wss netter dan met die counter
                 counter += 1
             if (evaluationMethod == "SARSA" or evaluationMethod == "Q"): 
-                ratio, _ = averagePerformance(V) # Note: significantly slows down iteration as this function iterates the game a few hundred times
-                                                  # Still, deemed an important progress measure
-                                                  #TODO? Maybe can be replaced by sliding-window type average (instead of running average as we use now in evaluation)
+                ratio, _, confInt = policyPerformanceStats(V) # Note: significantly slows down iteration as 
+                                                        # this function iterates the game a few hundred times. 
+                                                        # Still, deemed an important progress measure. 
+                                                        # TODO? Maybe can be replaced by sliding-window type 
+                                                        # average (instead of running average as we use now in evaluation)
                 winRatios[n//interval] = ratio
+                confIntervals[n//interval,:] = confInt
                 print(f"{n+1} out of {nrEpisodes}, current win ratio is {ratio:3.4f}. eps {epsilon}")
             else: 
                 print(f"{n+1} out of {nrEpisodes}")
          
-    return V, valueUpdates, errors, gameDurations, np.asarray(gamesWon), winRatios
+    return V, valueUpdates, errors, gameDurations, np.asarray(gamesWon), winRatios, confIntervals
 
 ### Analysis ###
 def plotInitialize():
@@ -196,16 +218,21 @@ def plotFromDict(errorDict, title = ""):
     plt.xlabel('Number of Visits')
     plt.ylabel('Error')
     plt.title('Error')
-    # plt.show()
+    #plt.show()
     plt.savefig("FrozenLakeError-"+title+".pdf", bbox_inches = 'tight')
 
 # Winning ratio development over time
-def plotWinRatios(winRatios, title, interval): # more informative method than learning curve!
+def plotWinRatios(winRatios, confIntervals, title, interval): 
+    # more informative method than learning curve!
     plotInitialize()
     
+    #winratios:
     x = np.arange(nrEpisodes//interval)*interval
     y = winRatios
-    plt.plot(x,y)
+    plt.plot(x,y, label = 'Winning ratios', color = 'b')
+    
+    #confidence intervals:
+    plt.plot(x,confIntervals, label = '95% Confidence intervals', color = 'r', linestyle = '--')
     
     plt.xlabel('Episode')
     plt.ylabel('Average reward per episode')
@@ -255,18 +282,30 @@ progressPoints = 100
 
 
 def runSimulation(evaluationMethod):
-    global V, valueUpdates, errors, durations, gamesWon, winRatios
-    V, valueUpdates, errors, durations, gamesWon, winRatios = policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod = evaluationMethod, epsilon = eps, printSteps = False)
+    global V, valueUpdates, errors, durations, gamesWon, winRatios, confIntervals
+    V, valueUpdates, errors, durations, gamesWon, winRatios, confIntervals = policyEvaluation(nrEpisodes, alpha, gamma, 
+                                                                                              evaluationMethod = evaluationMethod, 
+                                                                                              epsilon = eps, 
+                                                                                              printSteps = False)
+                                                                                               
     plotFromDict(errors, evaluationMethod)
     # plotLearningCurve(gamesWon, evaluationMethod)
     printGameSummary(durations, gamesWon, evaluationMethod, winRatios)
-    plotWinRatios(winRatios, evaluationMethod, len(gamesWon)//len(winRatios)) 
+    plotWinRatios(winRatios, confIntervals, evaluationMethod, len(gamesWon)//len(winRatios)) 
     print(gamesWon)
+    
+    #final policy evaluation:
+    if (evaluationMethod == "SARSA" or evaluationMethod == "Q"): 
+        win, std, CI = policyPerformanceStats(V, nrGames = 10000)
+        print("Final policy has winning ratio {:.3} with confidence interval [{:.3},{:.3}]".format(win, CI[0], CI[1]))
     
     if evaluationMethod == "TD":
         # True value function (computed with Mathematica)
         V[15]=1
-        trueV = np.array([0.0139398, 0.0116309, 0.020953, 0.0104765, 0.0162487, 0, 0.0407515, 0, 0.0348062, 0.0881699, 0.142053, 0, 0, 0.17582, 0.439291, 1])
+        trueV = np.array([0.0139398, 0.0116309, 0.020953,   0.0104765, 
+                          0.0162487, 0,         0.0407515,  0, 
+                          0.0348062, 0.0881699, 0.142053,   0, 
+                          0,         0.17582,   0.439291,   1])
         plotValueUpdates(valueUpdates, trueV)
         print("overall error:")
         print(np.sum(np.abs(V-trueV)))
