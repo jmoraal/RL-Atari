@@ -29,16 +29,17 @@ def createEnv(game, size = 4):
         nrActions  = env.nA
         returns = np.zeros(nrStates)
 
+def greedy(Q, state):
+    ''' Makes greedy choice for action given state and value table'''
+    argmaxes = np.flatnonzero(Q[state,:] == np.max(Q[state,:]))
+    return np.random.choice(argmaxes)
+
 def epsGreedy(Q, state, epsilon = 0.05): 
     ''' Makes epsilon-greedy choice for action given state and value table'''
     if np.random.rand() > epsilon: # with probability 1-epsilon, choose current best option greedily
-        return np.argmax(Q[state,:])
+        return greedy(Q,state)
     else: # with probability epsilon, choose randomly
         return env.action_space.sample()
-
-def greedy(Q, state):
-    ''' Makes greedy choice for action given state and value table'''
-    return np.argmax(Q[state,:])
 
 
 def summaryStats(data, confidence = 0.95): 
@@ -85,7 +86,6 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, p
     winRatios = np.zeros(progressPoints)
     confIntervals = np.zeros((progressPoints,2))
     valueUpdates = np.zeros([nrStates, progressPoints+1])
-    counter = 1
     
     # Initialize value function and error lists
     if evaluationMethod == "TD":
@@ -99,6 +99,10 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, p
         V = np.ones((nrStates,nrActions))
         errors = {i:list() for i in range(nrStates*nrActions)} 
         action = env.action_space.sample()  # needs to be initialized for SARSA
+    elif evaluationMethod == "DoubleQ": 
+        V = np.ones((nrStates,nrActions,2)) #instead of Q1 and Q2, initialise one array with extra axis
+        errors = {i:list() for i in range(nrStates*nrActions)}
+
         
     # Run game nrEpisodes times
     for n in range(nrEpisodes):
@@ -136,7 +140,6 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, p
                 V[currentState,action] += alpha*(reward + gamma*tempMax - tempValue)
                     
                 errors[currentState*nrActions + action].append(float(np.abs(tempValue-V[currentState, action]))) # TODO or different error?
-                #J: In this formulation yes; but errors are not actually equal as they depend on the update. 
                 #TODO Also, error now changes with alpha, book does not do this; what should we take?
                 
             #SARSA:
@@ -149,11 +152,29 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, p
                 V[currentState,action] += alpha*(reward + gamma*V[newState,newAction] - V[currentState, action])
                 errors[currentState*nrActions + action].append(float(np.abs(tempValue-V[currentState, action]))) # TODO or different error?
                 action = newAction 
-              
+            
+            #Double-Q learning: (avoids maximisation bias)
+            elif evaluationMethod == "DoubleQ": 
+                #Pick action epsilon-greedy from Q1+Q2 (via axis-sum)
+                tempV = np.sum(V, axis = 2)
+                action = epsGreedy(np.sum(V, axis = 2), currentState, epsilon = epsilon)
+                
+                newState, reward, done, info = env.step(action)
+                
+                ind = np.random.randint(0,1,) #chooses which array to update
+                
+                tempValue = V[currentState, action, ind]
+                maxAction = np.argmax(V[newState,:, ind])
+                V[currentState,action, ind] += alpha*(reward + gamma*V[newState, maxAction, 1-ind] - tempValue)
+                errors[currentState*nrActions + action].append(float(np.abs(tempValue-V[currentState, action,ind]))) 
+                
+            
+            
             # Update state
             currentState = newState
             t += 1
-            
+        
+        
         # Print results if desired
         if printSteps:
             directions =  ["L", "D", "R", "U"]
@@ -163,15 +184,20 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, p
         if reward == 1: gameDurations.append(t+1) # won the game
         gamesWon[n] = reward
         
+        
         interval = nrEpisodes//progressPoints
         if ((n+1) % interval == 0): #Print progress given number of times (evenly distributed)
             epsilon *= decay_rate
             epsilon = max(epsilon, min_epsilon)
     
+            if evaluationMethod == "DoubleQ": 
+                Vtemp = np.sum(V,axis = 2)
+                
             if evaluationMethod == "TD":
-                valueUpdates[:,counter] = V #TODO kan wss netter dan met die counter
-                counter += 1
-            if (evaluationMethod == "SARSA" or evaluationMethod == "Q"): 
+                valueUpdates[:,n//interval] = V 
+                print(f"{n+1} out of {nrEpisodes}")
+            else:
+            #if (evaluationMethod == "SARSA" or evaluationMethod == "Q"): 
                 ratio, _, confInt = policyPerformanceStats(V) # Note: significantly slows down iteration as 
                                                         # this function iterates the game a few hundred times. 
                                                         # Still, deemed an important progress measure. 
@@ -180,10 +206,10 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, p
                 winRatios[n//interval] = ratio
                 confIntervals[n//interval,:] = confInt
                 print(f"{n+1} out of {nrEpisodes}, current win ratio is {ratio:3.4f}. eps {epsilon}")
-            else: 
-                print(f"{n+1} out of {nrEpisodes}")
          
+    
     return V, valueUpdates, errors, gameDurations, np.asarray(gamesWon), winRatios, confIntervals
+
 
 ### Analysis ###
 def plotInitialize():
@@ -293,6 +319,7 @@ def runSimulation(evaluationMethod):
         plotValueUpdates(valueUpdates, trueV)
         print("overall error:")
         print(np.sum(np.abs(V-trueV)))
+
 
 # TD: 
 # evaluationMethod = "TD"
