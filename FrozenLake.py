@@ -61,9 +61,7 @@ def epsGreedy(Q, state, epsilon = 0.05):
 def summaryStats(data, confidence = 0.95): 
     mean = np.mean(data)
     std = np.std(data)
-    confInt = st.t.interval(0.95, len(data)-1, loc=mean, scale=std/np.sqrt(len(data))) 
-    #(here scale equals standard error; could use st.sem() for this, but is slower:)
-    # confInt = st.t.interval(0.95, len(data)-1, loc=mean, scale=st.sem(data)) 
+    confInt = st.t.interval(0.95, len(data)-1, loc=mean, scale=st.sem(data)) 
     
     return mean, std, confInt
     
@@ -116,7 +114,7 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, p
         errors = {i:list() for i in range(nrStates*nrActions)} 
         action = env.action_space.sample()  # needs to be initialized for SARSA
     elif evaluationMethod == "DoubleQ": 
-        V = np.ones((nrStates,nrActions,2)) #instead of Q1 and Q2, initialise one array with extra axis
+        Vdouble = np.ones((nrStates,nrActions,2)) #instead of Q1 and Q2, initialise one array with extra axis
         errors = {i:list() for i in range(nrStates*nrActions)}
 
         
@@ -172,17 +170,16 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, p
             #Double-Q learning: (avoids maximisation bias)
             elif evaluationMethod == "DoubleQ": 
                 #Pick action epsilon-greedy from Q1+Q2 (via axis-sum)
-                tempV = np.sum(V, axis = 2)
-                action = epsGreedy(np.sum(V, axis = 2), currentState, epsilon = epsilon)
+                action = epsGreedy(np.sum(Vdouble, axis = 2), currentState, epsilon = epsilon)
                 
                 newState, reward, done, info = env.step(action)
                 
-                ind = np.random.randint(0,1,) #chooses which array to update
+                ind = np.random.randint(2) #chooses which array to update
                 
-                tempValue = V[currentState, action, ind]
-                maxAction = np.argmax(V[newState,:, ind])
-                V[currentState,action, ind] += alpha*(reward + gamma*V[newState, maxAction, 1-ind] - tempValue)
-                errors[currentState*nrActions + action].append(float(np.abs(tempValue-V[currentState, action,ind]))) 
+                tempValue = Vdouble[currentState, action, ind]
+                maxAction = greedy(Vdouble[:,:, ind],newState)#np.argmax(Vdouble[newState,:, ind])
+                Vdouble[currentState,action, ind] += alpha*(reward + gamma*Vdouble[newState, maxAction, 1-ind] - tempValue)
+                errors[currentState*nrActions + action].append(float(np.abs(tempValue-Vdouble[currentState, action,ind]))) 
                 
             
             
@@ -207,7 +204,7 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, p
             epsilon = max(epsilon, min_epsilon)
     
             if evaluationMethod == "DoubleQ": 
-                Vtemp = np.sum(V,axis = 2)
+                V = np.sum(Vdouble,axis = 2)
                 
             if evaluationMethod == "TD":
                 valueUpdates[:,n//interval] = V 
@@ -344,10 +341,10 @@ def runSimulation(evaluationMethod):
 # evaluationMethod = "Q"
 
 # SARSA:
-evaluationMethod = "SARSA"
+# evaluationMethod = "SARSA"
 
 #Double Q-learning: 
-# evaluationMethod = "DoubleQ"
+evaluationMethod = "DoubleQ"
 
 runSimulation(evaluationMethod)
 
