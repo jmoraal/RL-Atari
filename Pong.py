@@ -41,6 +41,8 @@ def policyEvaluation(nrEpisodes, printSteps):
         
 ### Execution ###
 createEnv() # create game 
+# env.render()
+env.close()
 
 nrEpisodes = 1
 printSteps = True
@@ -51,8 +53,16 @@ decay_rate = .5
 min_epsilon = 0.01
 progressPoints = 100
 
-policyEvaluation(nrEpisodes, printSteps)
+# policyEvaluation(nrEpisodes, printSteps)
 
 
 
 
+for i in range(210):
+    for j in range(160):
+        
+        color = env.reset()[i,j,0]
+        # print(color)
+    # if i > 33 and i < 194:
+        if  color != 109 and color != 53 and color != 0:
+            print(env.reset()[i,j])
