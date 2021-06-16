@@ -11,9 +11,9 @@ import scipy.stats as st
 np.random.seed(1964)
 
 ### Initialise game settings etc.
-def createEnv(game, size = 4): 
-    ''' Create game environment from Gym package.'''
-    global nrStates, nrActions, returns, env
+def createEnv(size = 4): 
+    ''' Create game environment from Gym package. '''
+    global nrStates, nrActions, env
     
     if game == "Pong":
         env = gym.make ("Pong-v0")
@@ -25,22 +25,20 @@ def createEnv(game, size = 4):
         else:
             env = gym.make ("FrozenLake-v0")
         
-        nrStates = env.nS
-        nrActions  = env.nA
-        returns = np.zeros(nrStates)
+    nrStates = env.nS
+    nrActions  = env.nA
 
 def greedy(Q, state):
-    ''' Makes greedy choice for action given state and value table'''
+    ''' Makes greedy choice for action given state and value table. '''
     argmaxes = np.flatnonzero(Q[state,:] == np.max(Q[state,:]))
     return np.random.choice(argmaxes)
 
 def epsGreedy(Q, state, epsilon = 0.05): 
-    ''' Makes epsilon-greedy choice for action given state and value table'''
+    ''' Makes epsilon-greedy choice for action given state and value table. '''
     if np.random.rand() > epsilon: # with probability 1-epsilon, choose current best option greedily
         return greedy(Q,state)
     else: # with probability epsilon, choose randomly
         return env.action_space.sample()
-
 
 def summaryStats(data, confidence = 0.95): 
     mean = np.mean(data)
@@ -79,6 +77,7 @@ def policyPerformanceStats(Q, policy = greedy, nrGames = 1000):
 # Main function: policy evaluation/improvement                    
 def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, printSteps = True): 
     
+
     gameDurations = [] # for analysis
     gamesWon = np.zeros(nrEpisodes)
     
@@ -98,13 +97,13 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, p
         valueUpdates[:,0] = V
     elif evaluationMethod == "Q":
         V = np.ones((nrStates,nrActions))
-        errors = {i:list() for i in range(nrStates*nrActions)}  # 2d matrix mapped to vector! J: Why? Doesn't it only make indexing difficult further on
+        errors = {i:list() for i in range(nrStates*nrActions)}  
     elif evaluationMethod == "SARSA":
         V = np.ones((nrStates,nrActions))
         errors = {i:list() for i in range(nrStates*nrActions)} 
         action = env.action_space.sample()  # needs to be initialized for SARSA
     elif evaluationMethod == "DoubleQ": 
-        Vdouble = np.ones((nrStates,nrActions,2)) #instead of Q1 and Q2, initialise one array with extra axis
+        Vdouble = np.ones((nrStates,nrActions,2)) #instead of Q1 and Q2, initialize one array with extra axis
         errors = {i:list() for i in range(nrStates*nrActions)}
 
         
@@ -119,11 +118,12 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, p
         while not(done):
             if printSteps: 
                 env.render()
-                
+                print("ok")
             # Evaluate policy
             #Temporal difference:
             if evaluationMethod == "TD":
                 action = env.action_space.sample()
+                print(action)
                 
                 # Take chosen action, visit new state and obtain reward
                 newState, reward, done, info = env.step(action)
@@ -138,7 +138,6 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, p
                 action = epsGreedy(V, currentState, epsilon = epsilon)
                 
                 newState, reward, done, info = env.step(action)
-                
                 tempValue = V[currentState, action]
                 tempMax = np.max(V[newState,:])
                 V[currentState,action] += alpha*(reward + gamma*tempMax - tempValue)
@@ -310,9 +309,7 @@ def printGameSummary(durations, gamesWon, evaluationMethod, winRatios):
 
 
 ### Execution ###
-# game = "Pong"
-game = "FrozenLake"
-createEnv(game) # create game 
+createEnv() # create game 
 
 nrEpisodes = 100000
 alpha = .02 # stepsize
@@ -327,7 +324,7 @@ def runSimulation(evaluationMethod):
     V, valueUpdates, errors, durations, gamesWon, winRatios, confIntervals = policyEvaluation(nrEpisodes, alpha, gamma, 
                                                                                               evaluationMethod = evaluationMethod, 
                                                                                               epsilon = eps, 
-                                                                                              printSteps = False)
+                                                                                              printSteps = True)
                                                                                                
     plotFromDict(errors, evaluationMethod)
     printGameSummary(durations, gamesWon, evaluationMethod, winRatios)
@@ -346,7 +343,7 @@ def runSimulation(evaluationMethod):
 
 
 # TD: 
-# evaluationMethod = "TD"
+evaluationMethod = "TD"
 
 # Q-learning:
 evaluationMethod = "Q"
