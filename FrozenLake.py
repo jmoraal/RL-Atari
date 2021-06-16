@@ -17,7 +17,7 @@ def createEnv(game, size = 4):
     
     if game == "Pong":
         env = gym.make ("Pong-v0")
-        nrStates = 256**(210*160*3)
+        nrStates = 2**(210*160)
         nrActions = 5
     elif game == "FrozenLake":  
         if size == 8:
@@ -50,7 +50,7 @@ def summaryStats(data, confidence = 0.95):
     return mean, std, confInt
     
 # Quality check of given policy
-def policyPerformanceStats(Q, policy = greedy, nrGames = 500): 
+def policyPerformanceStats(Q, policy = greedy, nrGames = 1000): 
     '''Performs same given policy over and over to measure accuracy, 
     outputs mean, std and confidence interval of mean
     
@@ -159,12 +159,13 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, p
             
             #Double-Q learning: (avoids maximisation bias)
             elif evaluationMethod == "DoubleQ": 
+                ind = np.random.randint(2) #chooses which array to update
+                action = epsGreedy(Vdouble[:,:,ind], currentState, epsilon = epsilon)
                 #Pick action epsilon-greedy from Q1+Q2 (via axis-sum)
-                action = epsGreedy(np.sum(Vdouble, axis = 2), currentState, epsilon = epsilon)
+                # action = epsGreedy(np.sum(Vdouble, axis = 2), currentState, epsilon = epsilon)
                 
                 newState, reward, done, info = env.step(action)
                 
-                ind = np.random.randint(2) #chooses which array to update
                 
                 tempValue = Vdouble[currentState, action, ind]
                 maxAction = greedy(Vdouble[:,:, ind],newState)#np.argmax(Vdouble[newState,:, ind])
@@ -237,13 +238,25 @@ def plotFromDict(errorDict, title = ""):
     plt.savefig("FrozenLakeError-"+title+".pdf", bbox_inches = 'tight')
     plt.show()
 
+def movingAverage(data, size):
+    '''Computes average of data over sliding window of width [size], 
+    returning array of length (len(data) - size)'''
+    data = np.array(data)
+    moment1 = np.convolve(data, np.ones(size), 'valid') / size #compute mean with sliding window
+    moment2 = np.convolve(data**2, np.ones(size), 'valid') / size #compute 2nd moment with sliding window
+    stds = np.sqrt(moment2 - moment1**2) #compute standard deviation elementwise from 1st and 2nd moment
+    confInts = np.array(st.t.interval(0.95, size-1, loc=moment1, scale=stds/(np.sqrt(size - 1)))).transpose()
+    
+    return moment1, stds, confInts
+
 # Winning ratio development over time
 def plotWinRatios(winRatios, confIntervals, title, interval): 
     # more informative method than learning curve!
     plotInitialize()
     
     #winratios:
-    x = np.arange(nrEpisodes//interval)*interval
+    #x = np.arange(nrEpisodes//interval)*interval
+    x = np.arange(len(winRatios))*interval
     y = winRatios
     plt.plot(x,y, label = 'Winning ratios', color = 'b')
     
@@ -287,8 +300,12 @@ def printGameSummary(durations, gamesWon, evaluationMethod, winRatios):
     last = gamesWon[-nrEpisodes//10:]
     print(f"Percentage of games won towards end: {np.sum(last)/len(last)*100}")
     print(f"Average duration winning game: {np.mean(durations)} steps") 
-    if (evaluationMethod == "SARSA" or evaluationMethod == "Q"): #TODO not yet working for TD
+    if (evaluationMethod == "SARSA" or evaluationMethod == "Q"): 
         print(f"Final winning ratio: {winRatios[-1]}")  
+    #final policy evaluation: 
+    if (evaluationMethod == "SARSA" or evaluationMethod == "Q" or evaluationMethod == "DoubleQ"): #TODO not yet working for TD
+        win, std, CI = policyPerformanceStats(V, nrGames = 10000)
+        print("Final policy has winning ratio {:.3} with confidence interval [{:.3},{:.3}]".format(win, CI[0], CI[1]))
 
 
 
@@ -297,12 +314,12 @@ def printGameSummary(durations, gamesWon, evaluationMethod, winRatios):
 game = "FrozenLake"
 createEnv(game) # create game 
 
-nrEpisodes = 200000
+nrEpisodes = 100000
 alpha = .02 # stepsize
 gamma = 1 # discounting rate; may differ per state and iteration
-eps = .07 # initial value
-decay_rate = 1
-min_epsilon = 0.07
+eps = .9 # initial value
+decay_rate = 0.8
+min_epsilon = 0.01
 progressPoints = 100 # choose 4 for TD, about 100 for others
 
 def runSimulation(evaluationMethod):
@@ -315,12 +332,6 @@ def runSimulation(evaluationMethod):
     plotFromDict(errors, evaluationMethod)
     printGameSummary(durations, gamesWon, evaluationMethod, winRatios)
     plotWinRatios(winRatios, confIntervals, evaluationMethod, len(gamesWon)//len(winRatios)) 
-    print(gamesWon)
-    
-    #final policy evaluation:
-    if (evaluationMethod == "SARSA" or evaluationMethod == "Q"): 
-        win, std, CI = policyPerformanceStats(V, nrGames = 10000)
-        print("Final policy has winning ratio {:.3} with confidence interval [{:.3},{:.3}]".format(win, CI[0], CI[1]))
     
     if evaluationMethod == "TD":
         # True value function (computed with Mathematica)
@@ -338,15 +349,18 @@ def runSimulation(evaluationMethod):
 # evaluationMethod = "TD"
 
 # Q-learning:
-# evaluationMethod = "Q"
+evaluationMethod = "Q"
 
 # SARSA:
 # evaluationMethod = "SARSA"
 
 #Double Q-learning: 
-evaluationMethod = "DoubleQ"
+# evaluationMethod = "DoubleQ"
 
 runSimulation(evaluationMethod)
 
 
 
+avgRatios, stds, confInts = movingAverage(gamesWon, 10000)
+
+plotWinRatios(avgRatios, confInts, "Qnew", 1)
