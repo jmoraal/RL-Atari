@@ -9,7 +9,7 @@ import scipy.stats as st
 from skimage.transform import resize
 np.random.seed(1964)
 
-### Initialise game settings etc.
+### Initialize game settings etc.
 def createEnv(): 
     ''' Create game environment from Gym package. '''
     global nrStates, nrActions, env
@@ -30,6 +30,37 @@ def epsGreedy(Q, state, epsilon = 0.05):
     else: # with probability epsilon, choose randomly
         return env.action_space.sample()
 
+# Quality check of given policy
+def policyPerformanceStats(Q, policy = greedy, nrGames = 1): 
+    '''Performs same given policy over and over to measure accuracy, 
+    outputs mean, std and confidence interval of mean
+    
+    2000 games is enough for an indication of progress; much more would 
+    slow down the iteration loop too much. 
+    
+    For narrow confidence interval to evaluate final policy, 
+    set nrGames to higher value '''
+    
+    rewards = np.zeros(nrGames)
+    
+    for i in range(nrGames):
+        done = False
+        state = env.reset()
+        state  = reduceState(state)
+        gameReward = 0
+        
+        while not done: 
+            env.render()
+            action = policy(Q, state)
+            state, reward, done, info = env.step(action)
+            state  = reduceState(state)
+            gameReward += reward
+        
+        rewards[i] = gameReward
+        
+    env.close()
+    
+    return summaryStats(rewards)
 
 def summaryStats(data, confidence = 0.95): 
     mean = np.mean(data)
@@ -42,7 +73,8 @@ def reduceState(state):
     ''' Reduces dimension of state. '''
     state = state[34:194,:,:] # remove top 34 and bottom 16 pixels
     state = state[:,:,0] # remove third axis (color channels)
-    state = np.where(state == 109, 0, state) # brown is background so set those values to 0
+    state = np.where(state == 144, 0, state) # brown is background so set those values to 0
+    
     state = np.where(state != 0, 255, state) # set all other values (green, white, orange) to 255
     
     state = resize(state, (5, 5)) # downscale image
@@ -50,26 +82,27 @@ def reduceState(state):
     state = state.flatten()
     state = state.dot(2**np.arange(state.size)[::-1]) # convert binary array to integer (=number of state) using dot product
 
-    return state
+    return int(state)
     
 # Main function: policy evaluation/improvement                    
-def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, printSteps = True): 
+def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, printSteps = True, VfromFile = False): 
     global V, gameDurations, pointsLost, pointsWon
     
     gameDurations = [] # for analysis
     pointsLost = np.zeros(nrEpisodes)  
     pointsWon = np.zeros(nrEpisodes)  
-    # winRatios = np.zeros(progressPoints)
-    # confIntervals = np.zeros((progressPoints,2))
-    # valueUpdates = np.zeros([nrStates, progressPoints+1])
     
     # Initialize value function and error lists
-    if evaluationMethod == "TD":
-        V = np.zeros(nrStates) 
-    elif evaluationMethod == "Q":
-        V = np.ones((nrStates,nrActions)) 
+    if evaluationMethod == "Q":
+        if VfromFile:
+            V = np.load(evaluationMethod+"V"+".npy")
+        else:
+            V = np.ones((nrStates,nrActions)) 
     elif evaluationMethod == "SARSA":
-        V = np.ones((nrStates,nrActions))
+        if VfromFile:
+            V = np.load(evaluationMethod+"V"+".npy")
+        else:
+            V = np.ones((nrStates,nrActions))
         action = env.action_space.sample() 
 
         
@@ -89,44 +122,28 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, p
                 env.render()
                 
             # Evaluate policy
-            #Temporal difference:
-            if evaluationMethod == "TD":
-                action = env.action_space.sample()
-                # print(action)
-                
-                # Take chosen action, visit new state and obtain reward
-                newState, reward, done, info = env.step(action)
-                newState  = reduceState(newState)
-                
-                # Update value function
-                tempValue = V[currentState]
-                V[currentState] += alpha*(reward + gamma*V[newState] - tempValue) 
-                # errors[currentState].append(float(np.abs(tempValue-V[currentState])))
-            
             #Q-learning:
-            elif evaluationMethod == "Q":
+            if evaluationMethod == "Q":
                 action = epsGreedy(V, currentState, epsilon = epsilon)
                 
                 newState, reward, done, info = env.step(action)
                 newState  = reduceState(newState)
                 
+                
                 tempValue = V[currentState, action]
                 tempMax = np.max(V[newState,:])
                 V[currentState,action] += alpha*(reward + gamma*tempMax - tempValue)
-                    
-                # errors[currentState*nrActions + action].append(float(np.abs(tempValue-V[currentState, action]))) # TODO or different error?
-                #TODO Also, error now changes with alpha, book does not do this; what should we take?
                 
             #SARSA:
             elif evaluationMethod == "SARSA":
-                # action = epsGreedy(V, currentState, epsilon = epsilon)
                 newState, reward, done, info = env.step(action)
+                
                 newState  = reduceState(newState)
+                
                 newAction = epsGreedy(V, newState, epsilon = epsilon)
                 
                 tempValue = V[currentState, action]
                 V[currentState,action] += alpha*(reward + gamma*V[newState,newAction] - V[currentState, action])
-                # errors[currentState*nrActions + action].append(float(np.abs(tempValue-V[currentState, action]))) # TODO or different error?
                 action = newAction 
                 
             # Keeping score
@@ -138,36 +155,13 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, p
             t += 1
             
         
-        print(f"Episode {n} finished after {t+1} timesteps with reward {reward}")
+        print(f"Episode {n} finished after {t+1} timesteps with epsilon {epsilon} and points {won}")
         gameDurations.append(t+1) # won the game
         pointsLost[n] = lost
         pointsWon[n] = won
         
         epsilon *= decay_rate
         epsilon = max(epsilon, min_epsilon)
-        
-        # interval = nrEpisodes//progressPoints #recall that '//' is division without remainder
-        # if ((n+1) % interval == 0): #Print progress given number of times (evenly distributed)
-        #     epsilon *= decay_rate
-        #     epsilon = max(epsilon, min_epsilon)
-    
-        #     if evaluationMethod == "DoubleQ": 
-        #         V = np.sum(Vdouble,axis = 2)
-                
-        #     if evaluationMethod == "TD":
-        #         valueUpdates[:,n//interval] = V 
-        #         print(f"{n+1} out of {nrEpisodes}")
-        #     else:
-        #     #if (evaluationMethod == "SARSA" or evaluationMethod == "Q"): 
-        #         ratio, _, confInt = policyPerformanceStats(V) # Note: significantly slows down iteration as 
-        #                                                 # this function iterates the game a few hundred times. 
-        #                                                 # Still, deemed an important progress measure. 
-        #                                                 # TODO? Maybe can be replaced by sliding-window type 
-        #                                                 # average (instead of running average as we use now in evaluation)
-        #         winRatios[n//interval] = ratio
-        #         confIntervals[n//interval,:] = confInt
-        #         print(f"{n+1} out of {nrEpisodes}, current win ratio is {ratio:3.4f}. eps {epsilon}")
-         
     
     return V, gameDurations, np.asarray(pointsLost), np.asarray(pointsWon)
 
@@ -188,11 +182,10 @@ def printGameSummary(durations, pointsLost, pointsWon, evaluationMethod):
     print(f"Mean points lost over last 100 games: {np.mean(pointsLost[-100:len(pointsLost)])}")
     print(f"Mean points won over last 100 games: {np.mean(pointsWon[-100:len(pointsWon)])}")
     print(f"Mean game duration over last 100 games: {np.mean(durations[-100:len(durations)])}")
-    print(f"Number of Q values updates: {np.count_nonzero(V != 1) }")
+    print(f"Number of states visited: {np.count_nonzero(V != 1) }")
 
-def plotPoints(pointsLost, pointsWon, title): # exclude final state 15 since this is not interesting 
+def plotPoints(pointsLost, pointsWon, title):
     plotInitialize()
-    
 
     plt.plot(pointsLost, label = "lost")
     plt.plot(pointsWon, label = "won")
@@ -203,57 +196,60 @@ def plotPoints(pointsLost, pointsWon, title): # exclude final state 15 since thi
     plt.legend()#prop={'size': 16})
     plt.savefig("Pong-"+title+".pdf", bbox_inches = 'tight')
     # plt.show()
+    
+def saveOutput(V, durations, pointsLost, pointsWon, title): 
+    np.save(title+"V", V)
+    np.save(title+"durations", durations)
+    np.save(title+"pointsLost", pointsLost)
+    np.save(title+"pointsWon", pointsWon)
+            
 
 ### Execution ###
 createEnv() # create game 
-env.close()
 
-nrEpisodes = 5
-alpha = .1 # stepsize
+nrEpisodes = 500
+alpha = .02 # stepsize
 gamma = .5 # discounting rate; may differ per state and iteration
 eps = .9 # initial value
-decay_rate = .5
+decay_rate = .9
 min_epsilon = 0.05
 
 def runSimulation(evaluationMethod):
     global V, valueUpdates, errors, durations, gamesWon, winRatios, confIntervals
-    V, durations, pointsLost, pointsWon = policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod = evaluationMethod, epsilon = eps, printSteps = False)
+    V, durations, pointsLost, pointsWon = policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod = evaluationMethod, epsilon = eps, printSteps = False, VfromFile = True)
                                                                                                
     printGameSummary(durations, pointsLost, pointsWon, evaluationMethod)
     plotPoints(pointsLost, pointsWon, evaluationMethod)
+    statesVisited = np.count_nonzero(V != 1)
     
-    return V, durations, pointsLost, pointsWon
+    return V, durations, pointsLost, pointsWon, statesVisited
     
-
-# TD: 
-# evaluationMethod = "TD"
-
 # Q-learning:
 evaluationMethod = "Q"
-V, durations, pointsLost, pointsWon = runSimulation(evaluationMethod)
+V, durations, pointsLost, pointsWon, statesVisited = runSimulation(evaluationMethod)
 
-QsaveV = V
-QsaveDurations = durations
-QsavePointsLost = pointsLost
-QsavePointsWon = pointsWon
+# QsaveV = V
+# QsaveDurations = durations
+# QsavePointsLost = pointsLost
+# QsavePointsWon = pointsWon
+# QsaveStatesVisited = statesVisited
+
+# saveOutput(QsaveV,QsaveDurations,QsavePointsLost,QsavePointsWon,valuationMethod)
 
 # SARSA:
 evaluationMethod = "SARSA"
 
-#Double Q-learning: 
-# evaluationMethod = "DoubleQ"
+V, durations, pointsLost, pointsWon, statesVisited = runSimulation(evaluationMethod)
+# SARSAsaveV = V
+# SARSAsaveDurations = durations
+# SARSAsavePointsLost = pointsLost
+# SARSAsavePointsWon = pointsWon
+# SARSAsaveStatesVisited = statesVisited
 
-V, durations, pointsLost, pointsWon = runSimulation(evaluationMethod)
-SARSAsaveV = V
-SARSAsaveDurations = durations
-SARSAsavePointsLost = pointsLost
-SARSAsavePointsWon = pointsWon
+# saveOutput(SARSAsaveV,SARSAsaveDurations,SARSAsavePointsLost,SARSAsavePointsWon,valuationMethod)
 
-# for i in range(210):
-#     for j in range(160):
-        
-#         color = env.reset()[i,j,0]
-#         # print(color)
-#     # if i > 33 and i < 194:
-#         if  color != 109 and color != 53 and color != 0:
-#             print(env.reset()[i,j])
+# policyPerformanceStats(SARSAsaveV)
+
+
+
+            

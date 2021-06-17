@@ -10,20 +10,15 @@ from matplotlib import pyplot as plt
 import scipy.stats as st
 np.random.seed(1964)
 
-### Initialise game settings etc.
+### Initialize game settings etc.
 def createEnv(size = 4): 
     ''' Create game environment from Gym package. '''
     global nrStates, nrActions, env
     
-    if game == "Pong":
-        env = gym.make ("Pong-v0")
-        nrStates = 2**(210*160)
-        nrActions = 5
-    elif game == "FrozenLake":  
-        if size == 8:
-            env = gym.make ("FrozenLake8x8-v0")
-        else:
-            env = gym.make ("FrozenLake-v0")
+    if size == 8:
+        env = gym.make ("FrozenLake8x8-v0")
+    else:
+        env = gym.make ("FrozenLake-v0")
         
     nrStates = env.nS
     nrActions  = env.nA
@@ -142,18 +137,16 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, p
                 tempMax = np.max(V[newState,:])
                 V[currentState,action] += alpha*(reward + gamma*tempMax - tempValue)
                     
-                errors[currentState*nrActions + action].append(float(np.abs(tempValue-V[currentState, action]))) # TODO or different error?
-                #TODO Also, error now changes with alpha, book does not do this; what should we take?
+                errors[currentState*nrActions + action].append(float(np.abs(tempValue-V[currentState, action]))) #
                 
             #SARSA:
             elif evaluationMethod == "SARSA":
-                # action = epsGreedy(V, currentState, epsilon = epsilon)
                 newState, reward, done, info = env.step(action)
                 newAction = epsGreedy(V, newState, epsilon = epsilon)
                 
                 tempValue = V[currentState, action]
                 V[currentState,action] += alpha*(reward + gamma*V[newState,newAction] - V[currentState, action])
-                errors[currentState*nrActions + action].append(float(np.abs(tempValue-V[currentState, action]))) # TODO or different error?
+                errors[currentState*nrActions + action].append(float(np.abs(tempValue-V[currentState, action]))) 
                 action = newAction 
             
             #Double-Q learning: (avoids maximisation bias)
@@ -226,7 +219,7 @@ def plotInitialize():
 def plotFromDict(errorDict, title = ""): 
     plotInitialize()
     
-    # Errors per state or state,action pair: (inspired by https://towardsdatascience.com/reinforcement-learning-rl-101-with-python-e1aa0d37d43b)
+    # Errors per state or state,action pair:
     errorLists = [list(x)[:nrEpisodes] for x in errorDict.values()]
     for errorList in errorLists:
         plt.plot(errorList)
@@ -250,7 +243,6 @@ def movingAverage(data, size):
 
 # Winning ratio development over time
 def plotWinRatios(winRatios, confIntervals, title, interval): 
-    # more informative method than learning curve!
     plotInitialize()
     
     #winratios:
