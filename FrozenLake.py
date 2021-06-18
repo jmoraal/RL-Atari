@@ -36,6 +36,7 @@ def epsGreedy(Q, state, epsilon = 0.05):
         return env.action_space.sample()
 
 def summaryStats(data, confidence = 0.95): 
+    ''' Given an array, returns mean, standard deviation and 95% confidence interval '''
     mean = np.mean(data)
     std = np.std(data)
     confInt = st.t.interval(0.95, len(data)-1, loc=mean, scale=st.sem(data)) 
@@ -47,7 +48,7 @@ def policyPerformanceStats(Q, policy = greedy, nrGames = 1000):
     '''Performs same given policy over and over to measure accuracy, 
     outputs mean, std and confidence interval of mean
     
-    2000 games is enough for an indication of progress; much more would 
+    1000 games is enough for an indication of progress; a lot more would 
     slow down the iteration loop too much. 
     
     For narrow confidence interval to evaluate final policy, 
@@ -118,7 +119,7 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, p
             #Temporal difference:
             if evaluationMethod == "TD":
                 action = env.action_space.sample()
-                print(action)
+                #print(action)
                 
                 # Take chosen action, visit new state and obtain reward
                 newState, reward, done, info = env.step(action)
@@ -126,7 +127,7 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, p
                 # Update value function
                 tempValue = V[currentState]
                 V[currentState] += alpha*(reward + gamma*V[newState] - tempValue) 
-                errors[currentState].append(float(np.abs(tempValue-V[currentState])))
+                errors[currentState].append(float(np.abs(reward + gamma*V[newState] - tempValue)))
             
             #Q-learning:
             elif evaluationMethod == "Q":
@@ -197,11 +198,14 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, p
                 print(f"{n+1} out of {nrEpisodes}")
             else:
             #if (evaluationMethod == "SARSA" or evaluationMethod == "Q"): 
-                ratio, _, confInt = policyPerformanceStats(V) # Note: significantly slows down iteration as 
-                                                        # this function iterates the game a few hundred times. 
-                                                        # Still, deemed an important progress measure. 
-                                                        # TODO? Maybe can be replaced by sliding-window type 
-                                                        # average (instead of running average as we use now in evaluation)
+                #ideally, the following line would work and save running time
+                # ratio, _, confInt = summaryStats(gamesWon[-10:]) 
+                #instead, the following:
+                ratio, _, confInt = policyPerformanceStats(V) 
+                # Note: significantly slows down iteration as 
+                # this function iterates the game a few hundred times. 
+                # Still, deemed an important progress measure.
+                
                 winRatios[n//interval] = ratio
                 confIntervals[n//interval,:] = confInt
                 print(f"{n+1} out of {nrEpisodes}, current win ratio is {ratio:3.4f}. eps {epsilon}")
@@ -212,21 +216,24 @@ def policyEvaluation(nrEpisodes, alpha, gamma, evaluationMethod , epsilon = 0, p
 
 ### Analysis ###
 def plotInitialize():
+    '''Initialises plot settings (no args or output)'''
     plt.clf() # Clears current figure
-    plt.figure(figsize=(10,5))
-    plt.rcParams.update({'font.size': 12})
+    plt.figure(figsize=(10,5)) #set plot size
+    plt.rcParams.update({'font.size': 12}) # set font size
     
-def plotFromDict(errorDict, title = ""): 
+def plotFromDict(errorDict, title = "", nrPoints = 100): 
+    ''' Given a dictionary of arrays, plots first 100 entries of each'''
     plotInitialize()
     
     # Errors per state or state,action pair:
     errorLists = [list(x)[:nrEpisodes] for x in errorDict.values()]
-    for errorList in errorLists:
-        plt.plot(errorList)
+    for errorList in errorLists: #extract arrays from dictionary
+        plt.plot(errorList[:nrPoints]) #plot extracted array
     
+    # Mark-up:
     plt.xlabel('Number of Visits')
     plt.ylabel('Error')
-    plt.title('Error')
+    plt.title('Update error per visit for each state')
     plt.savefig("FrozenLakeError-"+title+".pdf", bbox_inches = 'tight')
     plt.show()
 
@@ -234,15 +241,28 @@ def movingAverage(data, size):
     '''Computes average of data over sliding window of width [size], 
     returning array of length (len(data) - size)'''
     data = np.array(data)
-    moment1 = np.convolve(data, np.ones(size), 'valid') / size #compute mean with sliding window
-    moment2 = np.convolve(data**2, np.ones(size), 'valid') / size #compute 2nd moment with sliding window
+    moment1 = np.convolve(data, np.ones(size), 'valid')/size #compute mean with sliding window
+    moment2 = np.convolve(data**2, np.ones(size), 'valid')/size #compute 2nd moment with sliding window
     stds = np.sqrt(moment2 - moment1**2) #compute standard deviation elementwise from 1st and 2nd moment
-    confInts = np.array(st.t.interval(0.95, size-1, loc=moment1, scale=stds/(np.sqrt(size - 1)))).transpose()
+    confInts = np.array(st.t.interval(0.95, size-1, 
+                                      loc=moment1, 
+                                      scale=stds/(np.sqrt(size - 1)))).transpose()
     
     return moment1, stds, confInts
 
 # Winning ratio development over time
 def plotWinRatios(winRatios, confIntervals, title, interval): 
+    '''Plots winning ratios with given confidence intervals
+    
+    INPUT: 
+        Array of winning ratios, length n
+        Array of confidence intervals, shape (n,2) 
+        Plot title (string)
+        Interval (int), number of episodes per datapoint (to correctly label the axes)
+    
+    OUTPUT:
+        none, only save to pdf
+    '''
     plotInitialize()
     
     #winratios:
@@ -266,6 +286,7 @@ def plotWinRatios(winRatios, confIntervals, title, interval):
 
 # Value function for TD learning
 def plotValueUpdates(valueUpdates, trueV): # exclude final state 15 since this is not interesting 
+    '''Given arrays of value-updates and true V, plots and saves both'''
     plotInitialize()
     
     for i in range(progressPoints):
@@ -286,37 +307,31 @@ def plotValueUpdates(valueUpdates, trueV): # exclude final state 15 since this i
 
 # Summary
 def printGameSummary(durations, gamesWon, evaluationMethod, winRatios):
+    '''Prints summary of information on developed policy, games won, etc. '''
     print(evaluationMethod,":")
     print(f"Percentage of games won: {(len(durations)/nrEpisodes)*100}")
-    last = gamesWon[-nrEpisodes//10:]
+    last = gamesWon[-nrEpisodes//10:] #array of  last 10% of games
     print(f"Percentage of games won towards end: {np.sum(last)/len(last)*100}")
-    print(f"Average duration winning game: {np.mean(durations)} steps") 
+    durMean, durstd, durCI = summaryStats(durations)
+    print(f"Average duration winning game: {durMean:.3f} steps, with CI {durCI}") 
     if (evaluationMethod == "SARSA" or evaluationMethod == "Q"): 
         print(f"Final winning ratio: {winRatios[-1]}")  
     #final policy evaluation: 
-    if (evaluationMethod == "SARSA" or evaluationMethod == "Q" or evaluationMethod == "DoubleQ"): #TODO not yet working for TD
+    if (evaluationMethod == "SARSA" or evaluationMethod == "Q" or evaluationMethod == "DoubleQ"):
         win, std, CI = policyPerformanceStats(V, nrGames = 10000)
-        print("Final policy has winning ratio {:.3} with confidence interval [{:.3},{:.3}]".format(win, CI[0], CI[1]))
+        print("Final policy has winning ratio {:.3}".format(win),
+              "with confidence interval [{:.3},{:.3}]".format(CI[0], CI[1]))
 
 
 
 ### Execution ###
-createEnv() # create game 
-
-nrEpisodes = 100000
-alpha = .02 # stepsize
-gamma = 1 # discounting rate; may differ per state and iteration
-eps = .9 # initial value
-decay_rate = 0.8
-min_epsilon = 0.01
-progressPoints = 100 # choose 4 for TD, about 100 for others
 
 def runSimulation(evaluationMethod):
     global V, valueUpdates, errors, durations, gamesWon, winRatios, confIntervals
     V, valueUpdates, errors, durations, gamesWon, winRatios, confIntervals = policyEvaluation(nrEpisodes, alpha, gamma, 
                                                                                               evaluationMethod = evaluationMethod, 
                                                                                               epsilon = eps, 
-                                                                                              printSteps = True)
+                                                                                              printSteps = False)
                                                                                                
     plotFromDict(errors, evaluationMethod)
     printGameSummary(durations, gamesWon, evaluationMethod, winRatios)
@@ -329,27 +344,36 @@ def runSimulation(evaluationMethod):
                           0.0162487, 0,         0.0407515,  0, 
                           0.0348062, 0.0881699, 0.142053,   0, 
                           0,         0.17582,   0.439291,   1])
-        plotValueUpdates(valueUpdates, trueV)
+        #plotValueUpdates(valueUpdates, trueV)
         print("overall error:")
         print(np.sum(np.abs(V-trueV)))
 
 
+createEnv() # create game 
+
+# Simulation (hyper)parameters: 
+nrEpisodes = 50000
+alpha = .02 # stepsize
+gamma = 1 # discounting rate; may differ per state and iteration
+eps = .9 # initial value
+decay_rate = 0.8
+min_epsilon = 0.01
+progressPoints = 100 # choose 4 for TD, about 100 for others
+
+
+# Choose evaluation method: (uncomment corresponding line, run 'runSimulation')
 # TD: 
-evaluationMethod = "TD"
+# evaluationMethod = "TD"
 
 # Q-learning:
-evaluationMethod = "Q"
+# evaluationMethod = "Q"
 
 # SARSA:
-# evaluationMethod = "SARSA"
+evaluationMethod = "SARSA"
 
 #Double Q-learning: 
 # evaluationMethod = "DoubleQ"
 
+
 runSimulation(evaluationMethod)
 
-
-
-avgRatios, stds, confInts = movingAverage(gamesWon, 10000)
-
-plotWinRatios(avgRatios, confInts, "Qnew", 1)
